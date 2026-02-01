@@ -1,0 +1,34 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms  # 연결 타임아웃
+      lettuce:
+        pool:
+          max-active: 8     # 최대 커넥션 수
+          max-idle: 8       # 최대 유휴 커넥션 수
+          min-idle: 0       # 최소 유휴 커넥션 수
+          max-wait: -1ms    # 커넥션 풀이 비었을 때 대기 시간
+
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/${MYSQL_DATABASE}?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&profileSQL=true&logger=Slf4JLogger
+    username: root
+    password: ${MYSQL_ROOT_PASSWORD}
+
+  jpa:
+    open-in-view: true
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc.batch_size: 20
+        order_inserts: true
+        order_updates: true
+      dialect: org.hibernate.dialect.MySQL8InnoDBDialect

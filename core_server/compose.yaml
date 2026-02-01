@@ -1,0 +1,23 @@
+name : refridge
+
+services:
+  redis:
+    container_name: refridge-redis-cache
+    image: 'redis:latest'
+    ports:
+      - '6379'
+
+  mysql:
+    image: mysql:latest
+    container_name: refridge-mysql-container
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    # RDB 의 볼륨 마운트 설정
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
