@@ -1,4 +1,4 @@
-package com.refridge.core_server.config;
+package com.refridge.core_server.common;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
