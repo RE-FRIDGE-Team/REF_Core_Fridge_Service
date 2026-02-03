@@ -86,4 +86,9 @@ public class REFGroceryItem {
 
     }
 
+    /* 원재료 DB상 임시 삭제 상태 변경 */
+    public void delete(){
+        this.groceryItemStatus = REFGroceryItemStatus.DELETED;
+    }
+
 }
