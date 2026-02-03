@@ -63,27 +63,34 @@ public class REFGroceryItem {
 
     /* 대표 이미지 변경 */
     public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
-        this.representativeImage = REFRepresentativeImage.of(representativeImageUrl);
+        if (isActive()){
+            this.representativeImage = REFRepresentativeImage.of(representativeImageUrl);
+        }
         return this.representativeImage;
     }
 
     /* 식재료명과 매칭되는 상품 삽입 */
     public void addMatchedProduct(REFRealProductName productName) {
-        if (this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE)) {
+        if (isActive()) {
             this.realProductNameSet.add(productName);
         }
     }
 
     /* 식재료명과 매칭되는 상품 삭제 */
     public void removeMatchedProduct(REFRealProductName productName) {
-        if (this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE)) {
+        if (isActive()) {
             this.realProductNameSet.remove(productName);
         }
     }
 
+    /* 활성화 상태인지 묻기 */
+    private boolean isActive(){
+        return this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE);
+    }
+
     /* 실제품병 기반으로 매칭된 원재료 관련 정보 획득 */
     public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName){
-        return Optional.of(realProductName)
+        return Optional.ofNullable(realProductName)
                 .filter(productName -> this.realProductNameSet.contains(REFRealProductName.of(productName)))
                 .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.fromDomainVO(
                         this.id, this.groceryItemName, this.representativeImage, this.groceryItemClassification, matchedProductName));
