@@ -69,12 +69,16 @@ public class REFGroceryItem {
 
     /* 식재료명과 매칭되는 상품 삽입 */
     public void addMatchedProduct(REFRealProductName productName) {
-        this.realProductNameSet.add(productName);
+        if (this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE)) {
+            this.realProductNameSet.add(productName);
+        }
     }
 
     /* 식재료명과 매칭되는 상품 삭제 */
     public void removeMatchedProduct(REFRealProductName productName) {
-        this.realProductNameSet.remove(productName);
+        if (this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE)) {
+            this.realProductNameSet.remove(productName);
+        }
     }
 
     /* 실제품병 기반으로 매칭된 원재료 관련 정보 획득 */
@@ -89,6 +93,11 @@ public class REFGroceryItem {
     /* 원재료 DB상 임시 삭제 상태 변경 */
     public void delete(){
         this.groceryItemStatus = REFGroceryItemStatus.DELETED;
+    }
+
+    /* 삭제된 아이템 복구 */
+    public void restore(){
+        this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
     }
 
 }
