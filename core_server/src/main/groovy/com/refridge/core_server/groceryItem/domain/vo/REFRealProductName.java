@@ -1,5 +1,6 @@
 package com.refridge.core_server.groceryItem.domain.vo;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.*;
 
@@ -9,6 +10,8 @@ import lombok.*;
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFRealProductName {
+
+    @Column(name = "product_name")
     private String productName;
 
     public static REFRealProductName of(String productName) {

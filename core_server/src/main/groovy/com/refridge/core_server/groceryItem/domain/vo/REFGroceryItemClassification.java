@@ -5,14 +5,15 @@ import lombok.Getter;
 
 import java.util.Arrays;
 
+@Getter
 @AllArgsConstructor
 public enum REFGroceryItemClassification {
-    FOOD_INGREDIENTS("F"),
-    RETORT_POUCH("R"),
-    MEAL_KIT("M");
+    FOOD_INGREDIENTS("F", "식재료"),
+    RETORT_POUCH("R", "레트로트 제품"),
+    MEAL_KIT("M", "밀키트");
 
-    @Getter
     private final String typeCode;
+    private final String korCode;
 
     public static REFGroceryItemClassification fromTypeCode(String typeCode) {
         return Arrays.stream(REFGroceryItemClassification.values())

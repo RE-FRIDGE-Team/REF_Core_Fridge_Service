@@ -1,6 +1,7 @@
 package com.refridge.core_server.groceryItem.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
+import com.refridge.core_server.groceryItem.domain.dto.REFGroceryItemDetailsForFridgeStock;
 import com.refridge.core_server.groceryItem.domain.vo.*;
 import com.refridge.core_server.groceryItem.infra.REFGroceryItemClassificationConverter;
 import com.refridge.core_server.groceryItem.infra.REFGroceryItemStatusConverter;
@@ -9,8 +10,11 @@ import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 @Entity
 @Table(name = "ref_grocery_item")
@@ -58,4 +62,25 @@ public class REFGroceryItem {
         this.groceryItemClassification = REFGroceryItemClassification.fromTypeCode(groceryItemClassification);
         this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
     }
+
+    /* 대표 이미지 변경 */
+    public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
+        this.representativeImage = REFRepresentativeImage.of(representativeImageUrl);
+        return this.representativeImage;
+    }
+
+    /* 식재료명과 매칭되는 상품 삽입 */
+    public void addMatchedProduct(REFRealProductName productName) {
+        this.realProductNameSet.add(productName);
+    }
+
+    /* 실제품병 기반으로 매칭된 원재료 관련 정보 획득 */
+    public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName){
+        return Optional.of(realProductName)
+                .filter(productName -> this.realProductNameSet.contains(REFRealProductName.of(productName)))
+                .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.fromDomainVO(
+                        this.id, this.groceryItemName, this.representativeImage, this.groceryItemClassification, matchedProductName));
+
+    }
+
 }
