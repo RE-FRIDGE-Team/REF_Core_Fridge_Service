@@ -55,7 +55,7 @@ class REFGroceryItemSpec extends Specification implements REFGroceryItemFixture 
 
     def "Builder 패턴으로 식료품을 생성할 수 있다"() {
         when: "Builder를 사용하면"
-        def item = REFGroceryItemMother.builder
+        def item = REFGroceryItemMother.builder()
                 .name("양파")
                 .foodIngredient()
                 .withProducts("농협 양파", "신선 양파")
