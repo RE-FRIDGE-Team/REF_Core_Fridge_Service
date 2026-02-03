@@ -1,4 +1,5 @@
 plugins {
+    id 'java'
     id 'groovy'
     id 'org.springframework.boot' version '4.0.2'
     id 'io.spring.dependency-management' version '1.1.7'
@@ -22,6 +23,20 @@ configurations {
 
 repositories {
     mavenCentral()
+}
+
+// 명시적으로 소스 디렉토리 지정 (선택사항)
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+    }
+    test {
+        groovy {
+            srcDirs = ['src/test/groovy']
+        }
+    }
 }
 
 dependencies {
