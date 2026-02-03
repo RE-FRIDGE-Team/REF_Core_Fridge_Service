@@ -10,11 +10,9 @@ import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 @Entity
 @Table(name = "ref_grocery_item")
@@ -72,6 +70,11 @@ public class REFGroceryItem {
     /* 식재료명과 매칭되는 상품 삽입 */
     public void addMatchedProduct(REFRealProductName productName) {
         this.realProductNameSet.add(productName);
+    }
+
+    /* 식재료명과 매칭되는 상품 삭제 */
+    public void removeMatchedProduct(REFRealProductName productName) {
+        this.realProductNameSet.remove(productName);
     }
 
     /* 실제품병 기반으로 매칭된 원재료 관련 정보 획득 */
