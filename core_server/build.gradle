@@ -1,5 +1,4 @@
 plugins {
-    id 'java'
     id 'groovy'
     id 'org.springframework.boot' version '4.0.2'
     id 'io.spring.dependency-management' version '1.1.7'
@@ -25,26 +24,8 @@ repositories {
     mavenCentral()
 }
 
-// 명시적으로 소스 디렉토리 지정 (선택사항)
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java']
-        }
-    }
-    test {
-        groovy {
-            srcDirs = ['src/test/groovy']
-        }
-    }
-}
-
 dependencies {
     runtimeOnly 'com.mysql:mysql-connector-j'
-
-    // Spock Framework
-    testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
-    testImplementation 'org.spockframework:spock-spring:2.3-groovy-4.0'
 
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -55,13 +36,6 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
     annotationProcessor 'org.projectlombok:lombok'
-
-    // H2 Database (MySQL 호환 모드)
-    testImplementation 'com.h2database:h2'
-
-    // Groovy (Spock에 필요)
-    testImplementation 'org.apache.groovy:groovy:4.0.15'
-
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-jdbc-test'
