@@ -163,6 +163,58 @@ public class REFMajorGroceryCategory {
                 .findFirst();
     }
 
+    /* BUSINESS LOGIC : 특정 중분류를 제거할 수 있다.*/
+    protected REFMajorGroceryCategory removeMinorCategory(REFMinorGroceryCategory minorCategory) {
+        return Optional.ofNullable(minorCategory)
+                .filter(this.minorCategories::contains)
+                .map(this::removeMinorCategoryAndBreakRelationWithMajorCategory)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "해당 중분류는 이 대분류에 속하지 않습니다."
+                ));
+    }
+
+    /* INTERNAL METHOD : 두 연관관계를 모두 끊어주는 컨비니언스 메서드 */
+    private REFMajorGroceryCategory removeMinorCategoryAndBreakRelationWithMajorCategory(REFMinorGroceryCategory minorCategory) {
+        this.minorCategories.remove(minorCategory);
+        minorCategory.detachFromMajor();
+        return this;
+    }
+
+    /* BUSINESS LOGIC : 특정 중분류를 제거 및 삭제할 수 있다.*/
+    public REFMajorGroceryCategory removeMinorCategoryAndDelete(
+            REFMinorGroceryCategory minorCategory,
+            REFMinorGroceryCategoryRepository repository
+    ) {
+        return Optional.of(minorCategory)
+                .map(this::removeMinorCategory)
+                .map(major -> {
+                    repository.delete(minorCategory);
+                    return major;
+                })
+                .orElseThrow(() -> new IllegalStateException("중분류 삭제에 실패했습니다."));
+    }
+
+    /* BUSINESS LOGIC : 이름으로 중분류를 제거할 수 있다.*/
+    protected REFMajorGroceryCategory removeMinorCategoryByName(String minorCategoryName) {
+        return findMinorCategoryByName(minorCategoryName)
+                .map(this::removeMinorCategory)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        String.format("'%s' 중분류를 찾을 수 없습니다.", minorCategoryName)
+                ));
+    }
+
+    /* BUSINESS LOGIC : 이름으로 중분류를 제거 및 삭제한다. */
+    public REFMajorGroceryCategory removeMinorCategoryByNameAndDelete(
+            String minorCategoryName,
+            REFMinorGroceryCategoryRepository repository
+    ) {
+        return findMinorCategoryByName(minorCategoryName)
+                .map(minor -> removeMinorCategoryAndDelete(minor, repository))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        String.format("'%s' 중분류를 찾을 수 없습니다.", minorCategoryName)
+                ));
+    }
+
     /* INTERNAL METHOD : 현재 대분류의 카테고리 텍스트 획득 */
     protected String getMajorCategoryNameText() {
         return this.categoryName.getValue();

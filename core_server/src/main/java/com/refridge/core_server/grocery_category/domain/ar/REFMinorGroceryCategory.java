@@ -101,4 +101,9 @@ public class REFMinorGroceryCategory {
     protected String getMinorCategoryNameText() {
         return this.categoryName.getValue();
     }
+
+    /* PACKAGE METHOD */
+    void detachFromMajor() {
+        this.majorCategory = null;
+    }
 }
