@@ -6,10 +6,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Optional;
-
 @Repository
-public interface REFGroceryCategoryRepository extends JpaRepository<REFMajorGroceryCategory, Long> {
+public interface REFMajorGroceryCategoryRepository extends JpaRepository<REFMajorGroceryCategory, Long> {
 
+    /* 이미 카테고리 중복된 이름이 존재하는지 */
+    @Query("SELECT COUNT(m) > 0 FROM REFMajorGroceryCategory m WHERE m.categoryName.value = :categoryName")
+    boolean existsByCategoryName(@Param("categoryName") String categoryName);
 }
