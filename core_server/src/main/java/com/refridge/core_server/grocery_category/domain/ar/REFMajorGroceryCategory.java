@@ -83,6 +83,54 @@ public class REFMajorGroceryCategory {
                 });
     }
 
+    /* BUSINESS LOGIC : 이 대분류의 하위 중분류 카테고리를 추가한다. */
+    public REFMinorGroceryCategory createMinorCategoryViaMajorCategory(String newMinorCategoryName) {
+        return ensurePersisted()
+                .flatMap(major -> validateMinorCategoryName(newMinorCategoryName))
+                .map(name -> REFMinorGroceryCategory.create(name, this))
+                .map(minor -> {
+                    this.minorCategories.add(minor);
+                    return minor;
+                })
+                .orElseThrow(() -> new IllegalStateException("중분류 추가에 실패했습니다."));
+    }
+
+    /* INTERNAL METHOD : 영속 보장 체크 */
+    private Optional<REFMajorGroceryCategory> ensurePersisted() {
+        return Optional.ofNullable(this.id)
+                .map(id -> this)
+                .or(() -> {
+                    throw new IllegalStateException("대분류가 저장되지 않았습니다.");
+                });
+    }
+
+    /* INTERNAL METHOD : 중분류 카테고리 이름 검증 메소드 */
+    private Optional<String> validateMinorCategoryName(String minorCategoryName) {
+        return Optional.ofNullable(minorCategoryName)
+                .map(String::trim)
+                .filter(REFMinorGroceryCategory::isValidCategoryNameCondition)
+                .filter(name -> !hasMinorCategoryWithName(name))
+                .or(() -> {
+                    throw new IllegalArgumentException(
+                            findMinorCategoryByName(minorCategoryName)
+                                    .map(m -> String.format("이미 존재하는 중분류입니다: %s", minorCategoryName))
+                                    .orElse("유효하지 않은 중분류 이름입니다.")
+                    );
+                });
+    }
+
+    /* BUSINESS LOGIC : 이미 대분류 하위에 해당 이름을 가진 중분류 카테고리가 있는지 확인한다. */
+    public boolean hasMinorCategoryWithName(String minorCategoryName) {
+        return findMinorCategoryByName(minorCategoryName).isPresent();
+    }
+
+    /* BUSINESS LOGIC : 대분류 하위 중분류들 중 이름을 통해 중분류 하나를 선택할 수 있다. */
+    public Optional<REFMinorGroceryCategory> findMinorCategoryByName(String minorCategoryName) {
+        return this.minorCategories.stream()
+                .filter(minor -> minor.getMinorCategoryNameText().equals(minorCategoryName))
+                .findFirst();
+    }
+
     /* INTERNAL METHOD : 현재 대분류의 카테고리 텍스트 획득 */
     protected String getMajorCategoryNameText() {
         return this.categoryName.getValue();
