@@ -48,4 +48,26 @@ public class REFMinorGroceryCategory {
                 .orElseThrow(() -> new IllegalArgumentException("대분류는 필수입니다."));
     }
 
+    /* BUSINESS LOGIC : 중분류의 이름을 변경할 수 있다. */
+    public REFMinorGroceryCategory changeCategoryName(String newCategoryName) {
+        return Optional.ofNullable(newCategoryName)
+                .map(String::trim)
+                .filter(this::isValidCategoryNameCondition)
+                .map(REFGroceryCategoryName::of)
+                .map(this::getMinorGroceryCategoryWithModifiedCategoryName)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "유효하지 않은 카테고리 이름입니다."
+                ));
+    }
+
+    /* INTERNAL METHOD : 카테고리명을 변경한 중분류 식재료 카테고리를 반환한다. */
+    private REFMinorGroceryCategory getMinorGroceryCategoryWithModifiedCategoryName(REFGroceryCategoryName categoryName) {
+        this.categoryName = categoryName;
+        return this;
+    }
+
+    /* INTERNAL METHOD : 카테고리명 생성 조건을 체크한다. */
+    private boolean isValidCategoryNameCondition(String categoryName){
+        return !categoryName.isEmpty() && categoryName.length() <= 20;
+    }
 }
