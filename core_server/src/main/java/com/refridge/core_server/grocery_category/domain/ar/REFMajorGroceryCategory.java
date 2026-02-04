@@ -27,4 +27,8 @@ public class REFMajorGroceryCategory {
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
+    /* INTERNAL METHOD : 현재 대분류의 카테고리 텍스트 획득 */
+    protected String getMajorCategoryNameText() {
+        return this.categoryName.getValue();
+    }
 }
