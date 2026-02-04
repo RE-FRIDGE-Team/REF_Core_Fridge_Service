@@ -2,6 +2,7 @@ package com.refridge.core_server.grocery_category.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
+import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryPathSeparator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -82,4 +83,21 @@ public class REFMinorGroceryCategory {
                 );
     }
 
+    /* BUSINESS LOGIC : 대분류를 포함해서 문자열 포매팅 된 카테고리 전문을 획득할 수 있다. */
+    public String formatFullCategoryPath() {
+        return Optional.ofNullable(this.majorCategory)
+                .map(major -> this.formatFullCategoryPathWithCategoryNames(
+                        major.getMajorCategoryNameText(), this.getMinorCategoryNameText()))
+                .orElse(this.categoryName.getValue());
+    }
+
+    /* INTERNAL METHOD : " > " 문자열을 기준으로 앞 뒤에 대분류와 중분류를 삽입할 수 있도록 포매팅 한다. */
+    private String formatFullCategoryPathWithCategoryNames(String majorCategoryName, String minorCategoryName) {
+        return majorCategoryName + REFGroceryCategoryPathSeparator.SEPARATOR + minorCategoryName;
+    }
+
+    /* INTERNAL METHOD : 현재 중분류의 카테고리 텍스트 획득 */
+    protected String getMinorCategoryNameText() {
+        return this.categoryName.getValue();
+    }
 }
