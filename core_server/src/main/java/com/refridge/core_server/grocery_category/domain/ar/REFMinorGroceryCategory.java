@@ -32,14 +32,14 @@ public class REFMinorGroceryCategory {
     @Embedded
     private REFEntityTimeMetaData timeMetaData;
 
-    /* 메서드 내부적 사용 : private 생성자 */
+    /* INTERNAL CONSTRUCTOR */
     private REFMinorGroceryCategory(REFGroceryCategoryName categoryName, REFMajorGroceryCategory majorCategory) {
         this.categoryName = categoryName;
         this.majorCategory = majorCategory;
     }
 
-    /* 중분류 생성 팩토리 메서드 */
-    static REFMinorGroceryCategory create(String categoryName, REFMajorGroceryCategory majorCategory) {
+    /* CREATION FACTORY METHOD */
+    public static REFMinorGroceryCategory create(String categoryName, REFMajorGroceryCategory majorCategory) {
         return Optional.ofNullable(majorCategory)
                 .map(major -> new REFMinorGroceryCategory(
                         REFGroceryCategoryName.of(categoryName),
@@ -67,7 +67,19 @@ public class REFMinorGroceryCategory {
     }
 
     /* INTERNAL METHOD : 카테고리명 생성 조건을 체크한다. */
-    private boolean isValidCategoryNameCondition(String categoryName){
+    private boolean isValidCategoryNameCondition(String categoryName) {
         return !categoryName.isEmpty() && categoryName.length() <= 20;
     }
+
+    /* BUSINESS LOGIC : 대분류를 변경할 수 있다. */
+    public void changeMajorCategory(REFMajorGroceryCategory otherMajorCategory) {
+        Optional.ofNullable(otherMajorCategory)
+                .ifPresentOrElse(
+                        major -> this.majorCategory = major,
+                        () -> {
+                            throw new IllegalArgumentException("대분류는 필수입니다.");
+                        }
+                );
+    }
+
 }
