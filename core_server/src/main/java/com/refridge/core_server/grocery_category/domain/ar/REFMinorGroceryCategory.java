@@ -46,6 +46,7 @@ public class REFMinorGroceryCategory {
                         REFGroceryCategoryName.of(categoryName),
                         major
                 ))
+                .filter(minorCategory -> REFMinorGroceryCategory.isValidCategoryNameCondition(minorCategory.getMinorCategoryNameText()))
                 .orElseThrow(() -> new IllegalArgumentException("대분류는 필수입니다."));
     }
 
@@ -53,7 +54,7 @@ public class REFMinorGroceryCategory {
     public REFMinorGroceryCategory changeCategoryName(String newCategoryName) {
         return Optional.ofNullable(newCategoryName)
                 .map(String::trim)
-                .filter(this::isValidCategoryNameCondition)
+                .filter(REFMinorGroceryCategory::isValidCategoryNameCondition)
                 .map(REFGroceryCategoryName::of)
                 .map(this::getMinorGroceryCategoryWithModifiedCategoryName)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -68,7 +69,7 @@ public class REFMinorGroceryCategory {
     }
 
     /* INTERNAL METHOD : 카테고리명 생성 조건을 체크한다. */
-    private boolean isValidCategoryNameCondition(String categoryName) {
+    public static boolean isValidCategoryNameCondition(String categoryName) {
         return !categoryName.isEmpty() && categoryName.length() <= 20;
     }
 
