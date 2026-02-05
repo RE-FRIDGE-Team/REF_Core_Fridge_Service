@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -34,6 +35,24 @@ public class REFMajorGroceryCategory {
     @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
+
+    /* JPA 생성 시점 콜백 - timeMetaData 자동 초기화 */
+    @PrePersist
+    protected void onCreate() {
+        if (timeMetaData == null) {
+            LocalDateTime now = LocalDateTime.now();
+            timeMetaData = new REFEntityTimeMetaData(now, now);
+        }
+    }
+
+    /* JPA 수정 시점 콜백 - updatedAt 자동 업데이트 */
+    @PreUpdate
+    protected void onUpdate() {
+        if (timeMetaData != null) {
+            LocalDateTime now = LocalDateTime.now();
+            timeMetaData = timeMetaData.updateModifiedAt(now);
+        }
+    }
 
     /* INTERNAL CONSTRUCTOR */
     private REFMajorGroceryCategory(REFGroceryCategoryName categoryName) {
