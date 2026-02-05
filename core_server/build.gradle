@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'groovy'
+    id 'idea'
     id 'org.springframework.boot' version '4.0.2'
     id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -25,17 +26,37 @@ repositories {
     mavenCentral()
 }
 
+// Q클래스 생성 디렉토리 설정
+def querydslDir = "$buildDir/generated/querydsl"
+
 // 명시적으로 소스 디렉토리 지정 (선택사항)
 sourceSets {
     main {
         java {
-            srcDirs = ['src/main/java']
+            srcDirs = ['src/main/java', querydslDir]
         }
     }
     test {
         groovy {
             srcDirs = ['src/test/groovy']
         }
+    }
+}
+
+// Q클래스 생성 태스크
+tasks.withType(JavaCompile).configureEach {
+    options.generatedSourceOutputDirectory = file(querydslDir)
+}
+
+// clean 시 Q클래스 삭제
+clean {
+    delete file(querydslDir)
+}
+
+idea {
+    module {
+        sourceDirs += file('build/generated/querydsl')
+        generatedSourceDirs += file('build/generated/querydsl')
     }
 }
 
@@ -52,6 +73,12 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
     annotationProcessor 'org.projectlombok:lombok'
+
+    // QueryDSL 의존성 - 활발히 유지보수되는 OpenFeign의 QueryDSL fork를 사용하는 것이 권장되며, 이 fork의 6.10.1 이상 버전에서 취약점이 패치
+    implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.1'
+    annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:7.1'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
 
 
     // Spock Framework
