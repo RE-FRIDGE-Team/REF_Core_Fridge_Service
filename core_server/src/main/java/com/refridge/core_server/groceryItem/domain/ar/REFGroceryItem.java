@@ -7,16 +7,19 @@ import com.refridge.core_server.groceryItem.infra.REFGroceryItemClassificationCo
 import com.refridge.core_server.groceryItem.infra.REFGroceryItemStatusConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.NoArgsConstructor;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
 @Entity
+@Builder
 @Table(name = "ref_grocery_item")
-@EntityListeners(AuditingEntityListener.class)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFGroceryItem {
 
@@ -46,50 +49,77 @@ public class REFGroceryItem {
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "ref_grocery_item_matched_product", joinColumns = @JoinColumn(name = "item_id"))
     /* 식재료에 매핑된 실제 상품명들 */
-    private Set<REFRealProductName> realProductNameSet =  new HashSet<>();
+    private Set<REFRealProductName> realProductNameSet = new HashSet<>();
+
+    @Embedded
+    /* 카테고리 참조 (FK) */
+    private REFGroceryCategoryReference groceryCategoryReference;
 
     @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
-    public REFGroceryItem(String groceryItemName,
-                          String representativeImageUrl,
-                          String groceryItemClassification) {
-        this.groceryItemName = REFGroceryItemName.of(groceryItemName);
-        this.representativeImage = REFRepresentativeImage.of(representativeImageUrl);
-        this.groceryItemClassification = REFGroceryItemClassification.fromTypeCode(groceryItemClassification);
-        this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
-    }
-
-    /* 대표 이미지 변경 */
-    public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
-        if (isActive()){
-            this.representativeImage = REFRepresentativeImage.of(representativeImageUrl);
+    /* JPA 생성 시점 콜백 - createdAt 자동 업데이트 */
+    @PrePersist
+    protected void onCreate() {
+        if (timeMetaData == null) {
+            LocalDateTime now = LocalDateTime.now();
+            timeMetaData = new REFEntityTimeMetaData(now, now);
         }
-        return this.representativeImage;
     }
 
-    /* 식재료명과 매칭되는 상품 삽입 */
+    /* JPA 수정 시점 콜백 - updatedAt 자동 업데이트 */
+    @PreUpdate
+    protected void onUpdate() {
+        if (timeMetaData != null) {
+            LocalDateTime now = LocalDateTime.now();
+            timeMetaData = timeMetaData.updateModifiedAt(now);
+        }
+    }
+
+    /* CREATION FACTORY METHOD */
+    public static REFGroceryItem create(String groceryItemName,
+                                          String representativeImageUrl,
+                                          String groceryItemClassification,
+                                          Long majorCategoryId, Long minorCategoryId) {
+        return REFGroceryItem.builder()
+                .groceryItemName(REFGroceryItemName.of(groceryItemName))
+                .representativeImage(REFRepresentativeImage.of(representativeImageUrl))
+                .groceryItemClassification(REFGroceryItemClassification.fromTypeCode(groceryItemClassification))
+                .groceryItemStatus(REFGroceryItemStatus.ACTIVE)
+                .groceryCategoryReference(REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId))
+                .build();
+    }
+
+    /* BUSINESS LOGIC : 식재료의 카테고리를 변경할 수 있다. */
+    public void changeCategory(Long majorCategoryId, Long minorCategoryId) {
+        if (isActive()) {
+            this.groceryCategoryReference = REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId);
+        }
+    }
+
+    /* BUSINESS LOGIC : 대표 이미지를 변경할 수 있다. */
+    public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
+        return this.representativeImage = isActive() ?
+                REFRepresentativeImage.of(representativeImageUrl) : this.representativeImage;
+    }
+
+    /* BUSINESS LOGIC : 해당 식재료와 매칭되는 상품을 삽입한다. (ex. 곰곰 콩나물 > 콩나물에 소속) */
     public void addMatchedProduct(REFRealProductName productName) {
         if (isActive()) {
             this.realProductNameSet.add(productName);
         }
     }
 
-    /* 식재료명과 매칭되는 상품 삭제 */
+    /* BUSINESS LOGIC : 해당 식재료와 매칭되는 상품 삭제한다. */
     public void removeMatchedProduct(REFRealProductName productName) {
         if (isActive()) {
             this.realProductNameSet.remove(productName);
         }
     }
 
-    /* 활성화 상태인지 묻기 */
-    private boolean isActive(){
-        return this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE);
-    }
-
-    /* 실제품병 기반으로 매칭된 원재료 관련 정보 획득 */
-    public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName){
+    /* BUSINESS LOGIC : 실제품명 기반으로 매칭된 원재료 관련 정보를 획득할 수 있다. */
+    public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName) {
         return Optional.ofNullable(realProductName)
                 .filter(productName -> this.realProductNameSet.contains(REFRealProductName.of(productName)))
                 .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.fromDomainVO(
@@ -97,13 +127,18 @@ public class REFGroceryItem {
 
     }
 
-    /* 원재료 DB상 임시 삭제 상태 변경 */
-    public void delete(){
+    /* INTERNAL LOGIC : 활성화 상태인지 체크 */
+    private boolean isActive() {
+        return this.groceryItemStatus.equals(REFGroceryItemStatus.ACTIVE);
+    }
+
+    /* BUSINESS LOGIC : 원재료를 삭제할 수 있다(활성 -> 삭제 상태 변경) */
+    public void delete() {
         this.groceryItemStatus = REFGroceryItemStatus.DELETED;
     }
 
-    /* 삭제된 아이템 복구 */
-    public void restore(){
+    /* BUSINESS LOGIC : 삭제된 원재료를 복구할 수 있다(삭제 -> 활성 상태 변경) */
+    public void restore() {
         this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
     }
 
