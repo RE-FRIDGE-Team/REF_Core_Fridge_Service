@@ -6,8 +6,9 @@ import com.refridge.core_server.groceryItem.domain.vo.REFRepresentativeImage;
 import lombok.Builder;
 
 @Builder
-public record REFGroceryItemDetailsForFridgeStock(Long id, String groceryItemName,
-                                                  String representativeImageUrl, String groceryItemType, String matchedProductName) {
+public record REFGroceryItemDetailsForFridgeStock(
+        Long id, String groceryItemName,
+        String representativeImageUrl, String groceryItemType, String matchedProductName) {
 
     public static REFGroceryItemDetailsForFridgeStock fromDomainVO(Long id, REFGroceryItemName groceryItemName,
                                                                    REFRepresentativeImage representativeImage, REFGroceryItemClassification groceryItemType,
