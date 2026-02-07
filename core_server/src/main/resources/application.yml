@@ -28,7 +28,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        jdbc.batch_size: 20
+        jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
       dialect: org.hibernate.dialect.MySQL8InnoDBDialect
