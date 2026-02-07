@@ -123,6 +123,13 @@ public class REFGroceryItem {
         }
     }
 
+    /* BUSINESS LOGIC : 식재료명을 변경할 수 있다. */
+    public void changeGroceryItemName(String newGroceryItemName) {
+        if (isActive()) {
+            this.groceryItemName = REFGroceryItemName.of(newGroceryItemName);
+        }
+    }
+
     /* BUSINESS LOGIC : 대표 이미지를 변경할 수 있다. */
     public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
         return this.representativeImage = isActive() ?
