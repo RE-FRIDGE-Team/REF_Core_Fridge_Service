@@ -1,15 +1,14 @@
 package com.refridge.core_server.groceryItem.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
+import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.dto.REFGroceryItemDetailsForFridgeStock;
+import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
 import com.refridge.core_server.groceryItem.domain.vo.*;
 import com.refridge.core_server.groceryItem.infra.REFGroceryItemClassificationConverter;
 import com.refridge.core_server.groceryItem.infra.REFGroceryItemStatusConverter;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -17,15 +16,22 @@ import java.util.Optional;
 import java.util.Set;
 
 @Entity
-@Builder
+@Builder(access = AccessLevel.PROTECTED)
 @Table(name = "ref_grocery_item")
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFGroceryItem {
 
     @Id
+    @Getter
     @Column(name = "item_id")
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "grocery_seq")
+    @SequenceGenerator(
+            name = "grocery_seq",
+            sequenceName = "ref_grocery_item_seq",
+            allocationSize = 50,
+            initialValue = 1
+    )
     private Long id;
 
     @Embedded
@@ -79,16 +85,35 @@ public class REFGroceryItem {
 
     /* CREATION FACTORY METHOD */
     public static REFGroceryItem create(String groceryItemName,
-                                          String representativeImageUrl,
-                                          String groceryItemClassification,
-                                          Long majorCategoryId, Long minorCategoryId) {
-        return REFGroceryItem.builder()
-                .groceryItemName(REFGroceryItemName.of(groceryItemName))
-                .representativeImage(REFRepresentativeImage.of(representativeImageUrl))
-                .groceryItemClassification(REFGroceryItemClassification.fromTypeCode(groceryItemClassification))
-                .groceryItemStatus(REFGroceryItemStatus.ACTIVE)
-                .groceryCategoryReference(REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId))
-                .build();
+                                        String representativeImageUrl,
+                                        String groceryItemClassification,
+                                        Long majorCategoryId, Long minorCategoryId,
+                                        REFGroceryItemCategoryValidatorService categoryValidator) {
+
+        return Optional.of(majorCategoryId)
+                .filter(categoryValidator::isValidMajorCategoryId)
+                .flatMap(validMajor -> Optional.of(minorCategoryId)
+                        .filter(categoryValidator::isValidMinorCategoryId))
+                .map(validMinor -> REFGroceryItem.builder()
+                        .groceryItemName(REFGroceryItemName.of(groceryItemName))
+                        .representativeImage(REFRepresentativeImage.of(representativeImageUrl))
+                        .groceryItemClassification(REFGroceryItemClassification.fromTypeCode(groceryItemClassification))
+                        .groceryItemStatus(REFGroceryItemStatus.ACTIVE)
+                        .groceryCategoryReference(REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId))
+                        .build())
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 카테고리 정보입니다."));
+    }
+
+    public static REFGroceryItem createAndSave(String groceryItemName,
+                                               String representativeImageUrl,
+                                               String groceryItemClassification,
+                                               Long majorCategoryId, Long minorCategoryId,
+                                               REFGroceryItemRepository repository, REFGroceryItemCategoryValidatorService categoryValidator) {
+        return Optional.of(REFGroceryItem.create(
+                        groceryItemName, representativeImageUrl,
+                        groceryItemClassification, majorCategoryId, minorCategoryId, categoryValidator))
+                .map(repository::save)
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 카테고리 정보입니다."));
     }
 
     /* BUSINESS LOGIC : 식재료의 카테고리를 변경할 수 있다. */
