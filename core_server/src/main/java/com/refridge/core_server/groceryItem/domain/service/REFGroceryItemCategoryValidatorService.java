@@ -5,6 +5,8 @@ import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryR
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class REFGroceryItemCategoryValidatorService {
@@ -19,5 +21,13 @@ public class REFGroceryItemCategoryValidatorService {
 
     public boolean isValidMinorCategoryId(Long minorCategoryId){
         return minorGroceryCategoryRepository.existsById(minorCategoryId);
+    }
+
+    public boolean isValidCategoryIds(Long majorCategoryId, Long minorCategoryId) {
+        return Optional.of(minorGroceryCategoryRepository.findById(minorCategoryId))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .map(minorCategory -> minorCategory.checkOwnMajorCategory(majorCategoryId))
+                .orElse(false);
     }
 }

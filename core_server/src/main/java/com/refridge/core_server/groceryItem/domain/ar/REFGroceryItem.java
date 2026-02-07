@@ -117,8 +117,10 @@ public class REFGroceryItem {
     }
 
     /* BUSINESS LOGIC : 식재료의 카테고리를 변경할 수 있다. */
-    public void changeCategory(Long majorCategoryId, Long minorCategoryId) {
-        if (isActive()) {
+    public void changeCategory(Long majorCategoryId, Long minorCategoryId,
+                               REFGroceryItemCategoryValidatorService categoryValidatorService) {
+
+        if (isActive() && categoryValidatorService.isValidCategoryIds(majorCategoryId, minorCategoryId)) {
             this.groceryCategoryReference = REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId);
         }
     }
