@@ -121,6 +121,13 @@ public class REFMinorGroceryCategory {
         return this.categoryName.getValue();
     }
 
+    /* BUSINESS LOGIC : 대분류 카테고리 ID가 이 중분류 카테고리와 알맞은 대분류 카테고리인지 확인한다. */
+    public boolean checkOwnMajorCategory(Long majorCategoryId) {
+        return Optional.ofNullable(this.majorCategory)
+                .map(major -> major.getId().equals(majorCategoryId))
+                .orElse(false);
+    }
+
     /* PACKAGE METHOD */
     void detachFromMajor() {
         this.majorCategory = null;
