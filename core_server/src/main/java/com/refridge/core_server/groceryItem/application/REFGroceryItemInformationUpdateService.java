@@ -1,7 +1,7 @@
 package com.refridge.core_server.groceryItem.application;
 
-import com.refridge.core_server.groceryItem.application.dto.REFGroceryImageUpdateCommand;
-import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemNameUpdateCommand;
+import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryImageUpdateCommand;
+import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemNameUpdateCommand;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

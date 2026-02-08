@@ -1,4 +1,4 @@
-package com.refridge.core_server.groceryItem.application.dto;
+package com.refridge.core_server.groceryItem.application.dto.command;
 
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
