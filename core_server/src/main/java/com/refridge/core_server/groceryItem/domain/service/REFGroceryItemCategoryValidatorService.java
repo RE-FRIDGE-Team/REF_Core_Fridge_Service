@@ -15,14 +15,6 @@ public class REFGroceryItemCategoryValidatorService {
 
     private final REFMinorGroceryCategoryRepository minorGroceryCategoryRepository;
 
-    public boolean isValidMajorCategoryId(Long majorCategoryId){
-        return majorGroceryCategoryRepository.existsById(majorCategoryId);
-    }
-
-    public boolean isValidMinorCategoryId(Long minorCategoryId){
-        return minorGroceryCategoryRepository.existsById(minorCategoryId);
-    }
-
     public boolean isValidCategoryIds(Long majorCategoryId, Long minorCategoryId) {
         return Optional.of(minorGroceryCategoryRepository.findById(minorCategoryId))
                 .filter(Optional::isPresent)
