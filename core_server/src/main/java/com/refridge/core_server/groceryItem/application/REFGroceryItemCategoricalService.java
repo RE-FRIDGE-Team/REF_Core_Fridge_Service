@@ -3,9 +3,9 @@ package com.refridge.core_server.groceryItem.application;
 import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemCategoryChangeCommand;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor

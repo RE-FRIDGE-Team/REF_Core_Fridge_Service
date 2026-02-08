@@ -5,9 +5,9 @@ import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemDelete
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
