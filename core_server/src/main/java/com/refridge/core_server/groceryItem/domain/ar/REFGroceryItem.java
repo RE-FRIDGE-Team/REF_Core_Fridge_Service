@@ -90,10 +90,8 @@ public class REFGroceryItem {
                                         Long majorCategoryId, Long minorCategoryId,
                                         REFGroceryItemCategoryValidatorService categoryValidator) {
 
-        return Optional.of(majorCategoryId)
-                .filter(categoryValidator::isValidMajorCategoryId)
-                .flatMap(validMajor -> Optional.of(minorCategoryId)
-                        .filter(categoryValidator::isValidMinorCategoryId))
+        return Optional.of(minorCategoryId)
+                .filter(ignored -> categoryValidator.isValidCategoryIds(majorCategoryId, minorCategoryId))
                 .map(validMinor -> REFGroceryItem.builder()
                         .groceryItemName(REFGroceryItemName.of(groceryItemName))
                         .representativeImage(REFRepresentativeImage.of(representativeImageUrl))
@@ -156,7 +154,7 @@ public class REFGroceryItem {
     public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName) {
         return Optional.ofNullable(realProductName)
                 .filter(productName -> this.realProductNameSet.contains(REFRealProductName.of(productName)))
-                .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.fromDomainVO(
+                .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.of(
                         this.id, this.groceryItemName, this.representativeImage, this.groceryItemClassification, matchedProductName));
 
     }

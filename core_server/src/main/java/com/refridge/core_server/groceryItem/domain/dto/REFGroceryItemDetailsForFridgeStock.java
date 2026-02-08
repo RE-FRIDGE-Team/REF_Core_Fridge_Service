@@ -10,9 +10,9 @@ public record REFGroceryItemDetailsForFridgeStock(
         Long id, String groceryItemName,
         String representativeImageUrl, String groceryItemType, String matchedProductName) {
 
-    public static REFGroceryItemDetailsForFridgeStock fromDomainVO(Long id, REFGroceryItemName groceryItemName,
-                                                                   REFRepresentativeImage representativeImage, REFGroceryItemClassification groceryItemType,
-                                                                   String matchedProductName) {
+    public static REFGroceryItemDetailsForFridgeStock of(Long id, REFGroceryItemName groceryItemName,
+                                                         REFRepresentativeImage representativeImage, REFGroceryItemClassification groceryItemType,
+                                                         String matchedProductName) {
         return REFGroceryItemDetailsForFridgeStock.builder()
                 .id(id)
                 .groceryItemName(groceryItemName.getValue())
