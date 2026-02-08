@@ -1,7 +1,7 @@
 package com.refridge.core_server.groceryItem.application;
 
-import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemCreateCommand;
-import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemDeleteCommand;
+import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemCreateCommand;
+import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemDeleteCommand;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;

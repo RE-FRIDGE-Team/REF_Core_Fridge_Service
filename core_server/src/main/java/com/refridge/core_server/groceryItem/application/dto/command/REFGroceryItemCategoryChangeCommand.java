@@ -1,4 +1,4 @@
-package com.refridge.core_server.groceryItem.application.dto;
+package com.refridge.core_server.groceryItem.application.dto.command;
 
 import lombok.Builder;
 

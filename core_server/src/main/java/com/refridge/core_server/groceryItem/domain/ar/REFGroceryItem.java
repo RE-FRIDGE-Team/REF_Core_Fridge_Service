@@ -5,8 +5,8 @@ import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.dto.REFGroceryItemDetailsForFridgeStock;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
 import com.refridge.core_server.groceryItem.domain.vo.*;
-import com.refridge.core_server.groceryItem.infra.REFGroceryItemClassificationConverter;
-import com.refridge.core_server.groceryItem.infra.REFGroceryItemStatusConverter;
+import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemClassificationConverter;
+import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemStatusConverter;
 import jakarta.persistence.*;
 import lombok.*;
 

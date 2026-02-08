@@ -1,6 +1,6 @@
 package com.refridge.core_server.groceryItem.application;
 
-import com.refridge.core_server.groceryItem.application.dto.REFGroceryItemCategoryChangeCommand;
+import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemCategoryChangeCommand;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
 import lombok.RequiredArgsConstructor;

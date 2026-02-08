@@ -1,4 +1,4 @@
-package com.refridge.core_server.groceryItem.infra;
+package com.refridge.core_server.groceryItem.infra.persistence;
 
 import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemStatus;
 import jakarta.persistence.AttributeConverter;
