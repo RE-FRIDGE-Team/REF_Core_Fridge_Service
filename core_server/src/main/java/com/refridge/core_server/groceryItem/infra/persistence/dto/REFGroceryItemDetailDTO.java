@@ -8,7 +8,6 @@ public record REFGroceryItemDetailDTO (
         String groceryItemName,
         Long majorCategoryId,
         Long minorCategoryId,
-        String categoryFullNameWithSeparator,
         String representativeImageUrl,
         String groceryItemClassificationCode
 ) {
