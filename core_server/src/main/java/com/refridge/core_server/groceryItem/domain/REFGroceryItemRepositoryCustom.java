@@ -9,10 +9,7 @@ import java.util.Optional;
 public interface REFGroceryItemRepositoryCustom {
     Optional<REFGroceryItemSummarizedDTO> findSummarizedDTOById(Long id);
     List<REFGroceryItemSummarizedDTO> findAllSummarizedDTOsByIds(List<Long> ids);
-    Optional<REFGroceryItemSummarizedDTO> findSummarizedDTOByItemName(String groceryItemName);
 
     Optional<REFGroceryItemDetailDTO> findDetailDTOById(Long id);
     List<REFGroceryItemDetailDTO> findAllDetailDTOsByIds(List<Long> ids);
-    Optional<REFGroceryItemDetailDTO> findDetailDTOByItemName(String groceryItemName);
-
 }

@@ -5,6 +5,7 @@ import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryIte
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemSummarizedDTO;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 import java.util.List;
 
@@ -15,6 +16,7 @@ public interface REFGroceryItemInformationMapper {
 
     List<REFGroceryItemSummaryInfoResult> toSummaryResultList(List<REFGroceryItemSummarizedDTO> refGroceryItemSummarizedDTOs);
 
+    @Mapping(target = "categoryLabelColorCode", ignore = true)
     REFGroceryItemDetailInfoResult toDetailResult(REFGroceryItemDetailDTO refGroceryItemDetailDTO);
 
     List<REFGroceryItemDetailInfoResult> toDetailResultList(List<REFGroceryItemDetailDTO> refGroceryItemDetailDTOs);

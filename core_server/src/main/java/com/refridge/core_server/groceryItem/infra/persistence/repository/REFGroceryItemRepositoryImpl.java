@@ -7,6 +7,7 @@ import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItem
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -21,9 +22,10 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
     }
 
     @Override
-    public Optional<REFGroceryItemSummarizedDTO> findSummarizedDTOByItemName(String groceryItemName) {
-        return Optional.empty();
+    public List<REFGroceryItemSummarizedDTO> findAllSummarizedDTOsByIds(List<Long> ids) {
+        return List.of();
     }
+
 
     @Override
     public Optional<REFGroceryItemDetailDTO> findDetailDTOById(Long id) {
@@ -31,7 +33,8 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
     }
 
     @Override
-    public Optional<REFGroceryItemDetailDTO> findDetailDTOByItemName(String groceryItemName) {
-        return Optional.empty();
+    public List<REFGroceryItemDetailDTO> findAllDetailDTOsByIds(List<Long> ids) {
+        return List.of();
     }
+
 }

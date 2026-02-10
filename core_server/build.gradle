@@ -61,14 +61,14 @@ idea {
 }
 
 dependencies {
-    // MapStruct
-    implementation 'org.mapstruct:mapstruct:1.6.3'
-    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
-
     // Lombok 사용 시 (필수)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+    // MapStruct
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'com.mysql:mysql-connector-j'
@@ -112,7 +112,8 @@ dependencies {
 tasks.withType(JavaCompile) {
     options.compilerArgs += [
             '-Amapstruct.defaultComponentModel=spring',
-            '-Amapstruct.unmappedTargetPolicy=IGNORE'
+            '-Amapstruct.unmappedTargetPolicy=IGNORE',
+            '-Amapstruct.verbose=true'
     ]
 }
 
