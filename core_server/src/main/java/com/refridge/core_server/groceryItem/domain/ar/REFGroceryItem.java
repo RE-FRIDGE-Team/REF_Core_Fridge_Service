@@ -52,6 +52,7 @@ public class REFGroceryItem {
     /* 데이터 상태 (활성화, 삭제) */
     private REFGroceryItemStatus groceryItemStatus;
 
+    @Builder.Default
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "ref_grocery_item_matched_product", joinColumns = @JoinColumn(name = "item_id"))
     /* 식재료에 매핑된 실제 상품명들 */
