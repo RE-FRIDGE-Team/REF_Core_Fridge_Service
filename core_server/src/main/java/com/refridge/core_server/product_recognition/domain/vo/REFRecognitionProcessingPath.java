@@ -8,6 +8,9 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum REFRecognitionProcessingPath {
+    /* 아직 인식 결과 도출 전 */
+    WAITING("WT", "처리 대기 상태"),
+
     /* 비식재료 사전에 의해 필터링 됨 */
     EXCLUSION("EX", "비식재료 사전 필터링"),
 
@@ -19,6 +22,7 @@ public enum REFRecognitionProcessingPath {
 
     /* 기존 분기에 모두 처리되지 않고 ML 모델에 의해 도출된 경우 */
     ML_MODEL("ML", "머신러닝 모델 결과 도출");
+
 
     private final String dbCode;
     private final String korCode;
