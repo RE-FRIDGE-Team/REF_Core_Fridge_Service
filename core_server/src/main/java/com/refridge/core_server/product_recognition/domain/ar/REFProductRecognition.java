@@ -70,11 +70,23 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
 
     /* BUSINESS LOGIC : 식재료 사전 매칭을 통해 결과 도출이 될 수 있다. */
     public void completeWithGroceryItemDictionaryMatch(REFProductRecognitionOutput output) {
+        modifySuccessfulOutput(output);
+        this.processingPath = REFRecognitionProcessingPath.GROCERY_ITEM_DICT;
+        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
+    }
+
+    /* BUSINESS LOGIC : 제품명 색인을 통해 결과 도출이 될 수 있다. */
+    public void completeWithProductIndexMatch(REFProductRecognitionOutput output){
+        modifySuccessfulOutput(output);
+        this.processingPath = REFRecognitionProcessingPath.PRODUCT_INDEX;
+        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
+    }
+
+    /* INTERNAL METHOD : 성공적으로 Output이 도출된 경우 시간 관련 필드를 변경하고 output을 재설정한다. */
+    private void modifySuccessfulOutput(REFProductRecognitionOutput output){
         this.recognitionOutput = output;
         this.status = REFProductRecognitionStatus.COMPLETED;
-        this.processingPath = REFRecognitionProcessingPath.INGREDIENT_DICT;
         this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
         this.completedAt = LocalDateTime.now();
-        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 }

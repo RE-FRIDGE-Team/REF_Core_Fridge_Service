@@ -15,7 +15,7 @@ public enum REFRecognitionProcessingPath {
     EXCLUSION("EX", "비식재료 사전 필터링"),
 
     /* 식재료 사전 필터에 매칭된 경우 */
-    INGREDIENT_DICT("ID", "식재료 사전 매칭"),
+    GROCERY_ITEM_DICT("GI", "식재료 사전 매칭"),
 
     /* DB 내의 제품명 목록 중 로직에 따라 매칭되는 제품명이 있는 경우 */
     PRODUCT_INDEX("PI", "제품명 목록 매칭"),
