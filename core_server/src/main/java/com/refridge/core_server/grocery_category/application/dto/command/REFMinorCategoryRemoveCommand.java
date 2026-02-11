@@ -5,6 +5,7 @@ import lombok.Builder;
 @Builder
 public record REFMinorCategoryRemoveCommand (
         Long majorCategoryId,
-        Long minorCategoryId
+        Long minorCategoryId,
+        String minorCategoryName
 ) {
 }

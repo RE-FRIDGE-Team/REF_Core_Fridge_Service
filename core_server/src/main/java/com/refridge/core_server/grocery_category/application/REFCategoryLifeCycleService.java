@@ -1,6 +1,7 @@
 package com.refridge.core_server.grocery_category.application;
 
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
+import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryCreationCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkInsertResult;
@@ -10,6 +11,7 @@ import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryR
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.ar.REFMajorGroceryCategory;
 import com.refridge.core_server.grocery_category.domain.ar.REFMinorGroceryCategory;
+import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,7 +90,7 @@ public class REFCategoryLifeCycleService {
     }
 
     @Transactional
-    public void deleteMinorCategory(REFMinorCategoryRemoveCommand command) {
+    public void deleteMinorCategoryById(REFMinorCategoryRemoveCommand command) {
         REFMinorGroceryCategory removeTargetMinorCategory = Optional.of(command)
                 .map(REFMinorCategoryRemoveCommand::minorCategoryId)
                 .flatMap(minorCategoryRepository::findById)
@@ -104,7 +106,17 @@ public class REFCategoryLifeCycleService {
         // TODO : 중분류 카테고리 제거 시 연관된 식재료들의 카테고리 처리 로직 필요, 중분류 삭제 이벤트 발행
     }
 
+    @Transactional
+    public void deleteMinorCategoryByName(REFMinorCategoryRemoveCommand command) {
+        Optional.of(command)
+                .map(REFMinorCategoryRemoveCommand::majorCategoryId)
+                .flatMap(majorCategoryRepository::findById)
+                .map(majorCategory ->
+                        majorCategory.removeMinorCategoryByNameAndDelete(command.minorCategoryName(), minorCategoryRepository))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid major category ID"));
 
+        // TODO : 중분류 카테고리 제거 시 연관된 식재료들의 카테고리 처리 로직 필요, 중분류 삭제 이벤트 발행
+    }
 
     private List<String> extractMinorCategoryNames(List<REFMinorCategoryCreationCommand> commands) {
         return commands.stream()
