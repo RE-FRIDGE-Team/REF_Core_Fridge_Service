@@ -33,7 +33,7 @@ public class REFCategoryLifeCycleService {
 
     @Transactional
     public REFMinorCategoryCreationResult createMinorCategoryByCategory(REFMinorCategoryCreationCommand command) {
-        Optional.ofNullable(command)
+        return Optional.ofNullable(command)
                 .map(REFMinorCategoryCreationCommand::majorCategoryId)
                 .flatMap(majorCategoryRepository::findById)
                 .map(majorCategory ->
