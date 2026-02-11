@@ -60,5 +60,11 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         return new REFProductRecognition(inputText, requesterId);
     }
 
-
+    /* BUSINESS LOGIC : 비식재료로 판단 후 인식 반려할 수 있다. */
+    public void rejectAsNonFood(){
+        this.status = REFProductRecognitionStatus.REJECTED;
+        this.processingPath = REFRecognitionProcessingPath.EXCLUSION;
+        this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
+        this.completedAt = LocalDateTime.now();
+    }
 }
