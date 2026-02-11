@@ -4,5 +4,5 @@ import lombok.Builder;
 
 @Builder
 public record REFMajorCategoryCreationResult(
-        Long majorCategoryId) {
+        Long createdMajorCategoryId) {
 }

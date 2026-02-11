@@ -2,6 +2,7 @@ package com.refridge.core_server.grocery_category.application;
 
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryCreationCommand;
+import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkInsertResult;
 import com.refridge.core_server.grocery_category.application.dto.result.REFMajorCategoryCreationResult;
 import com.refridge.core_server.grocery_category.application.dto.result.REFMinorCategoryCreationResult;
 import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryRepository;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -44,5 +46,31 @@ public class REFCategoryLifeCycleService {
                 .map(REFMinorGroceryCategory::getId)
                 .map(REFMinorCategoryCreationResult::new)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid minor category creation command"));
+    }
+
+    @Transactional
+    public REFCategoryBulkInsertResult createMajorCategoryWithBulkMinorCategories(REFMajorCategoryCreationCommand majorCommand, List<REFMinorCategoryCreationCommand> minorCommands) {
+
+        REFMajorGroceryCategory majorCategory = REFMajorGroceryCategory.createAndSave(
+                majorCommand.majorCategoryName(), majorCategoryRepository);
+
+        List<REFMinorGroceryCategory> savedMinors = majorCategory
+                .addMinorCategoriesAndSaveViaMajorCategory(
+                        extractMinorCategoryNames(minorCommands), minorCategoryRepository);
+
+        List<REFMinorCategoryCreationResult> minorResults = savedMinors.stream()
+                .map(minor -> new REFMinorCategoryCreationResult(minor.getId()))
+                .toList();
+
+        return REFCategoryBulkInsertResult.builder()
+                .majorCategoryCreationResult(new REFMajorCategoryCreationResult(majorCategory.getId()))
+                .minorCategoryCreationResult(minorResults)
+                .build();
+    }
+
+    private List<String> extractMinorCategoryNames(List<REFMinorCategoryCreationCommand> commands) {
+        return commands.stream()
+                .map(REFMinorCategoryCreationCommand::minorCategoryName)
+                .toList();
     }
 }
