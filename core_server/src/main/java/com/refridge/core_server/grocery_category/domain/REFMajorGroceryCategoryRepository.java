@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface REFMajorGroceryCategoryRepository extends JpaRepository<REFMajorGroceryCategory, Long> {
+public interface REFMajorGroceryCategoryRepository extends JpaRepository<REFMajorGroceryCategory, Long>, REFMajorGroceryCategoryRepositoryCustom {
 
     /* 이미 카테고리 중복된 이름이 존재하는지 */
     @Query("SELECT COUNT(m) > 0 FROM REFMajorGroceryCategory m WHERE m.categoryName.value = :categoryName")
