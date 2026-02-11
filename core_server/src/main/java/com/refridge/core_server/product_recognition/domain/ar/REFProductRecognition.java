@@ -91,6 +91,18 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 
+    /* BUSINESS LOGIC : 머신러닝 모델까지 갔는데, 식재료가 아니라고 판단한 경우 */
+    public void failToMatch(){
+        this.status = REFProductRecognitionStatus.NO_MATCH;
+        this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
+        this.completedAt = LocalDateTime.now();
+    }
+
+    /* BUSINESS LOGIC : 인식 과정이 모두 완료된 경우에만 피드백을 받을 수 있다. */
+    public boolean canReceiveFeedback() {
+        return this.status == REFProductRecognitionStatus.COMPLETED;
+    }
+
     /* INTERNAL METHOD : 성공적으로 Output이 도출된 경우 시간 관련 필드를 변경하고 output을 재설정한다. */
     private void modifySuccessfulOutput(REFProductRecognitionOutput output){
         this.recognitionOutput = output;
