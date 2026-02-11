@@ -1,6 +1,7 @@
 package com.refridge.core_server.grocery_category.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
+import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryPathSeparator;
 import jakarta.persistence.*;
@@ -67,6 +68,17 @@ public class REFMinorGroceryCategory {
                 ))
                 .filter(minorCategory -> REFMinorGroceryCategory.isValidCategoryNameCondition(minorCategory.getMinorCategoryNameText()))
                 .orElseThrow(() -> new IllegalArgumentException("대분류는 필수입니다."));
+    }
+
+    /* CREATION FACTORY METHOD WITH SAVE REPOSITORY */
+    public static REFMinorGroceryCategory createAndSave(
+            String categoryName,
+            REFMajorGroceryCategory majorCategory,
+            REFMinorGroceryCategoryRepository repository) {
+
+        return Optional.ofNullable(REFMinorGroceryCategory.create(categoryName, majorCategory))
+                .map(repository::save)
+                .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 중분류 카테고리 정보입니다."));
     }
 
     /* BUSINESS LOGIC : 중분류의 이름을 변경할 수 있다. */
