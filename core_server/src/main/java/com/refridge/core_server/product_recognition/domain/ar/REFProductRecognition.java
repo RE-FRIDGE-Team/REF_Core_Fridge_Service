@@ -82,6 +82,15 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 
+    /* BUSINESS LOGIC : 머신러닝 모델을 통해 결과 도출이 될 수 있다. */
+    public void completeWithMLPrediction(REFProductRecognitionOutput output){
+        modifySuccessfulOutput(output);
+        this.processingPath = REFRecognitionProcessingPath.ML_MODEL;
+        // TODO : ML 모델은 GroceryItem에 해당 원재료가 있어야만 처리가 되는가 대해 어떻게 할지 고민해봐야 함.
+        // TODO : 만약 없다면, GroceryItem도 새로 생성하는 로직이 필요할 수도?
+        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
+    }
+
     /* INTERNAL METHOD : 성공적으로 Output이 도출된 경우 시간 관련 필드를 변경하고 output을 재설정한다. */
     private void modifySuccessfulOutput(REFProductRecognitionOutput output){
         this.recognitionOutput = output;
