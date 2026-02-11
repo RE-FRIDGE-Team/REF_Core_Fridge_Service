@@ -1,7 +1,9 @@
 package com.refridge.core_server.grocery_category.domain.vo;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+@Getter
 @RequiredArgsConstructor
 public enum REFCategoryColorTag {
     SOFT_RED("#E8A0A0"),       // 부드러운 레드
