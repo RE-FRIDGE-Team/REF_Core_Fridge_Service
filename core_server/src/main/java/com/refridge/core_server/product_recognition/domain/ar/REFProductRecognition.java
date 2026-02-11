@@ -73,6 +73,7 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         this.recognitionOutput = output;
         this.status = REFProductRecognitionStatus.COMPLETED;
         this.processingPath = REFRecognitionProcessingPath.INGREDIENT_DICT;
+        this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
         this.completedAt = LocalDateTime.now();
         // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
