@@ -8,16 +8,18 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.domain.AbstractAggregateRoot;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Entity
+@SuppressWarnings("NullableProblems")
 @Table(name = "ref_minor_grocery_category")
 @EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class REFMinorGroceryCategory {
+public class REFMinorGroceryCategory extends AbstractAggregateRoot<REFMinorGroceryCategory> {
 
     @Id
     @Getter

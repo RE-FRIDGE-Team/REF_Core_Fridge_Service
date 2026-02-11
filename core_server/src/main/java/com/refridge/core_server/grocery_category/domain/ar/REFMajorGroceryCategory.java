@@ -9,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.data.domain.AbstractAggregateRoot;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
@@ -16,10 +17,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Entity
+@SuppressWarnings("NullableProblems")
 @Table(name = "ref_major_grocery_category")
 @EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class REFMajorGroceryCategory {
+public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroceryCategory> {
 
     @Id
     @Getter
