@@ -39,13 +39,12 @@ public class REFCategoryLifeCycleService {
                 .map(REFMinorCategoryCreationCommand::majorCategoryId)
                 .flatMap(majorCategoryRepository::findById)
                 .map(majorCategory ->
-                        REFMinorGroceryCategory.createAndSave(
+                        majorCategory.addMinorCategoryAndSaveViaMajorCategory(
                                 command.minorCategoryName(),
-                                majorCategory,
                                 minorCategoryRepository))
                 .map(REFMinorGroceryCategory::getId)
                 .map(REFMinorCategoryCreationResult::new)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid minor category creation command"));
+                .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
     }
 
     @Transactional
