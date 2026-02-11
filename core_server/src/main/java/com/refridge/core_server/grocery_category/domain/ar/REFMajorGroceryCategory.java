@@ -3,6 +3,7 @@ package com.refridge.core_server.grocery_category.domain.ar;
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
+import com.refridge.core_server.grocery_category.domain.vo.REFCategoryColorTag;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -36,6 +37,9 @@ public class REFMajorGroceryCategory {
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
+    @Transient
+    private transient REFCategoryColorTag categoryColorTag;
+
     /* JPA 생성 시점 콜백 - timeMetaData 자동 초기화 */
     @PrePersist
     protected void onCreate() {
@@ -52,6 +56,16 @@ public class REFMajorGroceryCategory {
             LocalDateTime now = LocalDateTime.now();
             timeMetaData = timeMetaData.updateModifiedAt(now);
         }
+    }
+
+    @PostPersist
+    protected void onPostPersist() {
+        this.categoryColorTag = REFCategoryColorTag.fromMajorCategoryId(this.id);
+    }
+
+    @PostLoad
+    protected void onPostLoad() {
+        this.categoryColorTag = REFCategoryColorTag.fromMajorCategoryId(this.id);
     }
 
     /* INTERNAL CONSTRUCTOR */
