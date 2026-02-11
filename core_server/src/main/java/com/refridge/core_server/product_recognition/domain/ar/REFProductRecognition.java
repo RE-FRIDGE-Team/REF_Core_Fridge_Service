@@ -8,7 +8,6 @@ import com.refridge.core_server.product_recognition.infra.REFRecognitionProcessi
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.NoArgsConstructor;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
@@ -17,7 +16,6 @@ import java.time.LocalDateTime;
 @Entity
 @SuppressWarnings("NullableProblems")
 @Table(name = "ref_product_recognition")
-@Builder(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecognition> {
@@ -41,10 +39,26 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
     @Convert(converter = REFProductRecognitionStatusConverter.class)
     private REFProductRecognitionStatus status;
 
-    @Column(name = "processing_path", nullable = false)
+    @Column(name = "processing_path")
     @Convert(converter = REFRecognitionProcessingPathConverter.class)
     private REFRecognitionProcessingPath processingPath;
 
     @Embedded
     private REFProductRecognitionOutput recognitionOutput;
+
+    private REFProductRecognition(String input, String requesterId){
+        this.id = REFRecognitionId.generate();
+        this.clientInputText = REFClientInputText.of(input);
+        this.requesterId = REFRequesterId.of(requesterId);
+        this.status = REFProductRecognitionStatus.PENDING;
+        this.processingPath = REFRecognitionProcessingPath.WAITING;
+        this.recognitionOutput = null;
+    }
+
+    /* FACTORY METHOD */
+    public static REFProductRecognition create(String inputText, String requesterId){
+        return new REFProductRecognition(inputText, requesterId);
+    }
+
+
 }
