@@ -100,7 +100,11 @@ public class REFCategoryLifeCycleService {
                 .map(majorCategory ->
                         majorCategory.removeMinorCategoryAndDelete(removeTargetMinorCategory, minorCategoryRepository))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category ID"));
+
+        // TODO : 중분류 카테고리 제거 시 연관된 식재료들의 카테고리 처리 로직 필요, 중분류 삭제 이벤트 발행
     }
+
+
 
     private List<String> extractMinorCategoryNames(List<REFMinorCategoryCreationCommand> commands) {
         return commands.stream()

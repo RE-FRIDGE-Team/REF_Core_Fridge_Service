@@ -9,6 +9,7 @@ import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemClas
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemStatusConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -16,11 +17,12 @@ import java.util.Optional;
 import java.util.Set;
 
 @Entity
+@SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
 @Table(name = "ref_grocery_item")
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class REFGroceryItem {
+public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
 
     @Id
     @Getter
