@@ -33,7 +33,7 @@ public class REFDictionaryEntry {
     @Column(nullable = false, updatable = false)
     private LocalDateTime addedAt;
 
-    static REFDictionaryEntry create(REFRecognitionDictionary dictionary, String text, REFEntrySource source) {
+    public static REFDictionaryEntry create(REFRecognitionDictionary dictionary, String text, REFEntrySource source) {
         REFDictionaryEntry entry = new REFDictionaryEntry();
         entry.dictionary = dictionary;
         entry.text = text;
