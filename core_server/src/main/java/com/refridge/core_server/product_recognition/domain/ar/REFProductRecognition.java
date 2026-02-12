@@ -46,6 +46,24 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
     @Embedded
     private REFProductRecognitionOutput recognitionOutput;
 
+    /* JPA 생성 시점 콜백 - createdAt 자동 업데이트 */
+    @PrePersist
+    protected void onCreate() {
+        if (entityTimeMetaData == null) {
+            LocalDateTime now = LocalDateTime.now();
+            entityTimeMetaData = new REFEntityTimeMetaData(now, now);
+        }
+    }
+
+    /* JPA 수정 시점 콜백 - updatedAt 자동 업데이트 */
+    @PreUpdate
+    protected void onUpdate() {
+        if (entityTimeMetaData != null) {
+            LocalDateTime now = LocalDateTime.now();
+            entityTimeMetaData = entityTimeMetaData.updateModifiedAt(now);
+        }
+    }
+
     private REFProductRecognition(String input, String requesterId){
         this.id = REFRecognitionId.generate();
         this.clientInputText = REFClientInputText.of(input);
