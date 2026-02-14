@@ -9,11 +9,11 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum REFRecognitionDictionaryType {
 
-    EXCLUSION("EX", "비식재료 사전", "recognition:dict:exclusion"),
-    GROCERY_ITEM("GR", "식재료 사전","recognition:dict:grocery-item");
+    EXCLUSION("EX", "비식재료 필터 사전", "recognition:dict:exclusion"),
+    GROCERY_ITEM("GR", "식재료 매칭 사전","recognition:dict:grocery-item");
 
     private final String dbCode;
-    private final String korCode;
+    private final String korDictName;
     private final String redisKey;
 
     public static REFRecognitionDictionaryType fromDbCode(String dbData) {
