@@ -9,16 +9,15 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
+import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.EXCLUSION;
+import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.GROCERY_ITEM;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class REFRecognitionDictionaryRedisSync {
 
     private final StringRedisTemplate redisTemplate;
-
-    private static final String EXCLUSION_KEY = "recognition:dict:exclusion";
-    private static final String GROCERY_ITEM_KEY = "recognition:dict:grocery-item";
-
 
     /**
      * Dictionary의 전체 entries를 Redis Set으로 동기화한다.
@@ -41,8 +40,8 @@ public class REFRecognitionDictionaryRedisSync {
 
     private String resolveKey(REFRecognitionDictionaryType type) {
         return switch (type) {
-            case EXCLUSION -> EXCLUSION_KEY;
-            case GROCERY_ITEM -> GROCERY_ITEM_KEY;
+            case EXCLUSION -> EXCLUSION.getRedisKey();
+            case GROCERY_ITEM -> GROCERY_ITEM.getRedisKey();
         };
     }
 }
