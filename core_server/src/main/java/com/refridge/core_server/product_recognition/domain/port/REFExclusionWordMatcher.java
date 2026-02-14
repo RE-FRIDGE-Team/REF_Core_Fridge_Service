@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 
-public interface REFExclusionWordMatcher {
+public interface REFExclusionWordMatcher extends REFTrieBasedWordMatcher {
 
     /**
      * @param input 제품명 텍스트
@@ -14,5 +14,4 @@ public interface REFExclusionWordMatcher {
 
     List<String> findAllMatches(String input);
 
-    void rebuild();
 }
