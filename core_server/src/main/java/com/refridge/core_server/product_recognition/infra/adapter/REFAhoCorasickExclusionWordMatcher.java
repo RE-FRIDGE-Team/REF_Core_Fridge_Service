@@ -10,6 +10,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 
+import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.EXCLUSION;
+
 
 @Slf4j
 @Component
@@ -18,7 +20,7 @@ public class REFAhoCorasickExclusionWordMatcher implements REFExclusionWordMatch
 
     private final StringRedisTemplate redisTemplate;
 
-    private static final String REDIS_KEY = "recognition:dict:exclusion";
+    private static final String REDIS_KEY = EXCLUSION.getRedisKey();
 
     /* 메모리에 캐싱된 Trie */
     private volatile Trie trie;
