@@ -72,6 +72,9 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 
+    // Aho-Corasick 알고리즘 (비식재료 필터, 식재료 사전 매칭)
+    implementation 'org.ahocorasick:ahocorasick:0.6.3'
+
     // Spock Framework
     testImplementation 'org.spockframework:spock-core:2.4-M1-groovy-4.0'
     testImplementation 'org.spockframework:spock-spring:2.4-M1-groovy-4.0'

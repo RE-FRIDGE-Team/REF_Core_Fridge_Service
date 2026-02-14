@@ -1,4 +1,4 @@
-package com.refridge.core_server.product_recognition.infra;
+package com.refridge.core_server.product_recognition.infra.converter;
 
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionStatus;
 import jakarta.persistence.AttributeConverter;

@@ -1,7 +1,7 @@
 package com.refridge.core_server.product_recognition.domain.vo;
 
 import com.refridge.core_server.product_recognition.domain.ar.REFRecognitionDictionary;
-import com.refridge.core_server.product_recognition.infra.REFEntrySourceConverter;
+import com.refridge.core_server.product_recognition.infra.converter.REFEntrySourceConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

@@ -2,10 +2,11 @@ package com.refridge.core_server.product_recognition.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.product_recognition.domain.vo.*;
-import com.refridge.core_server.product_recognition.infra.REFRecognitionDictionaryTypeConverter;
+import com.refridge.core_server.product_recognition.infra.converter.REFRecognitionDictionaryTypeConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
@@ -25,6 +26,7 @@ public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecogniti
     /* 사전 구분 아이디 */
     private REFRecognitionDictionaryId id;
 
+    @Getter
     @Column(name = "dict_type")
     @Convert(converter = REFRecognitionDictionaryTypeConverter.class)
     /* 사전 타입 : 비식재료 필터 || 식재료 사전 */
@@ -41,6 +43,7 @@ public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecogniti
     @Embedded
     private REFEntityTimeMetaData entityTimeMetaData;
 
+    @Getter
     /* Redis <-> Aho-corasick 사전과의 버전 관리용 */
     private int version;
 

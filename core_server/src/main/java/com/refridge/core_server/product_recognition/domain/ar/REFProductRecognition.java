@@ -3,8 +3,8 @@ package com.refridge.core_server.product_recognition.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.product_recognition.domain.vo.*;
-import com.refridge.core_server.product_recognition.infra.REFProductRecognitionStatusConverter;
-import com.refridge.core_server.product_recognition.infra.REFRecognitionProcessingPathConverter;
+import com.refridge.core_server.product_recognition.infra.converter.REFProductRecognitionStatusConverter;
+import com.refridge.core_server.product_recognition.infra.converter.REFRecognitionProcessingPathConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
