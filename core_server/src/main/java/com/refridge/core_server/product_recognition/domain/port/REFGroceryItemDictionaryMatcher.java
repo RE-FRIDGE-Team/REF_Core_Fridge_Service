@@ -4,9 +4,8 @@ import com.refridge.core_server.product_recognition.domain.dto.REFGroceryItemDic
 
 import java.util.Optional;
 
-public interface REFGroceryItemDictionaryMatcher {
+public interface REFGroceryItemDictionaryMatcher extends REFTrieBasedWordMatcher {
 
     Optional<REFGroceryItemDictionaryMatchInfo> findMatch(String input);
 
-     void rebuild();
 }
