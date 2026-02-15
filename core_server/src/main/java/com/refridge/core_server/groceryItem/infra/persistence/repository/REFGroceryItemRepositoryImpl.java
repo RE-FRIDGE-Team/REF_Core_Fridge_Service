@@ -125,5 +125,4 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                         rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE))
                 .fetch();
     }
-
 }
