@@ -2,6 +2,7 @@ package com.refridge.core_server.groceryItem.application;
 
 import com.refridge.core_server.groceryItem.application.dto.query.REFGroceryItemInformationQuery;
 import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemDetailInfoResult;
+import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemProductNameMatchResult;
 import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemSummaryInfoResult;
 import com.refridge.core_server.groceryItem.application.mapper.REFGroceryItemInformationMapper;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
@@ -113,6 +114,14 @@ public class REFGroceryItemQueryService {
                     return enrichWithCategoryName(result, categoryFullName);
                 })
                 .toList();
+    }
+
+    /**
+     * 입력 텍스트와 가장 유사한 제품명(alias)을 찾아
+     * 매핑된 GroceryItem 정보를 반환한다.
+     */
+    public Optional<REFGroceryItemProductNameMatchResult> searchByProductName(String input) {
+        return refGroceryItemRepository.findBestMatchByProductName(input);
     }
 
     private REFGroceryItemDetailInfoResult mappingResultFromDto(REFGroceryItemDetailDTO dto) {
