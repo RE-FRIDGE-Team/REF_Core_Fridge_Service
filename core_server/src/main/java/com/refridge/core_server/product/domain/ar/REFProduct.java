@@ -51,6 +51,12 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     private REFProductStatus status;
 
     @Embedded
+    private REFGroceryItemReference groceryItemReference;
+
+    @Column(name = "is_virtual", nullable = false)
+    private boolean isVirtual;
+
+    @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
