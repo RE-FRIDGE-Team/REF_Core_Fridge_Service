@@ -1,5 +1,6 @@
 package com.refridge.core_server.product_recognition.infra.sync;
 
+import com.refridge.core_server.product_recognition.domain.port.REFBrandMatcher;
 import com.refridge.core_server.product_recognition.domain.port.REFExclusionWordMatcher;
 import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemDictionaryMatcher;
 import com.refridge.core_server.product_recognition.domain.port.REFTrieBasedWordMatcher;
@@ -16,11 +17,13 @@ public class REFTrieMatcherRegistry {
 
     public REFTrieMatcherRegistry(
             REFExclusionWordMatcher exclusionMatcher,
-            REFGroceryItemDictionaryMatcher groceryItemMatcher
+            REFGroceryItemDictionaryMatcher groceryItemMatcher,
+            REFBrandMatcher brandMatcher
     ) {
         matchers = new EnumMap<>(REFRecognitionDictionaryType.class);
         matchers.put(REFRecognitionDictionaryType.EXCLUSION, exclusionMatcher);
         matchers.put(REFRecognitionDictionaryType.GROCERY_ITEM, groceryItemMatcher);
+        matchers.put(REFRecognitionDictionaryType.BRAND, brandMatcher);
     }
 
     public REFTrieBasedWordMatcher getMatcher(REFRecognitionDictionaryType type) {

@@ -10,7 +10,8 @@ import java.util.Arrays;
 public enum REFRecognitionDictionaryType {
 
     EXCLUSION("EX", "비식재료 필터 사전", "recognition:dict:exclusion"),
-    GROCERY_ITEM("GR", "식재료 매칭 사전","recognition:dict:grocery-item");
+    GROCERY_ITEM("GR", "식재료 매칭 사전","recognition:dict:grocery-item"),
+    BRAND("BR", "브랜드명 매칭 사전", "recognition:dict:brand");
 
     private final String dbCode;
     private final String korDictName;

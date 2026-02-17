@@ -9,8 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
-import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.EXCLUSION;
-import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.GROCERY_ITEM;
+import static com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType.*;
 
 @Slf4j
 @Component
@@ -42,6 +41,7 @@ public class REFRecognitionDictionaryRedisSync {
         return switch (type) {
             case EXCLUSION -> EXCLUSION.getRedisKey();
             case GROCERY_ITEM -> GROCERY_ITEM.getRedisKey();
+            case BRAND -> BRAND.getRedisKey();
         };
     }
 }
