@@ -1,5 +1,6 @@
 package com.refridge.core_server.product_recognition.application;
 
+import com.refridge.core_server.product_recognition.domain.service.REFProductRecognitionDomainService;
 import com.refridge.core_server.product_recognition.domain.REFProductRecognitionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -9,5 +10,7 @@ import org.springframework.stereotype.Service;
 public class REFProductRecognitionAppService {
 
     private final REFProductRecognitionRepository productRecognitionRepository;
+
+    private final REFProductRecognitionDomainService productRecognitionDomainService;
 
 }
