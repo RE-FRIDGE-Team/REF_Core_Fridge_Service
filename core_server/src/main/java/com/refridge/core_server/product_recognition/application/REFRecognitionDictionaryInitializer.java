@@ -41,16 +41,24 @@ public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
                 REFRecognitionDictionaryType.values().length);
     }
 
-    private void initializeDictionaryIfAbsent(REFRecognitionDictionaryType type) {
+    /**
+     * 사전이 DB에 존재하지 않으면 초기 사전을 생성하는 메서드
+     * @param type 사전 타입 (EXCLUSION, GROCERY_ITEM, BRAND)
+     */
+    @Transactional
+    protected void initializeDictionaryIfAbsent(REFRecognitionDictionaryType type) {
         boolean exists = dictionaryRepository.existsByDictTypeAndDictName(type, REFRecognitionDictionaryName.of(type.getKorDictName()));
         if (!exists) {
             REFRecognitionDictionary dictionary = switch (type) {
                 case EXCLUSION -> REFRecognitionDictionary.createExclusionDictionary(type.getKorDictName());
                 case GROCERY_ITEM -> REFRecognitionDictionary.createIngredientDictionary(type.getKorDictName());
+                case BRAND ->  REFRecognitionDictionary.createBrandDictionary(type.getKorDictName());
             };
             dictionaryRepository.save(dictionary);
             log.info("사전 생성 완료: {}", type.getKorDictName());
         }
+        // TODO : DB 사전 새로 생성한 경우 DEFAULT 데이터가 필요함. JSON -> DB Insert 로직 추가 필요
+        // TODO : JSON -> DTO -> AR Insert 로직을 사용해 구현하기.
     }
 
     private void syncToRedis(REFRecognitionDictionaryType type) {

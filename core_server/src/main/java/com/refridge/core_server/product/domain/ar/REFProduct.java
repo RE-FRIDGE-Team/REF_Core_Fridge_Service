@@ -77,4 +77,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
             timeMetaData = timeMetaData.updateModifiedAt(now);
         }
     }
+
+
 }

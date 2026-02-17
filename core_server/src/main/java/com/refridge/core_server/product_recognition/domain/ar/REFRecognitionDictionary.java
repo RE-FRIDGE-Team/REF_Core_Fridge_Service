@@ -29,7 +29,7 @@ public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecogniti
     @Getter
     @Column(name = "dict_type")
     @Convert(converter = REFRecognitionDictionaryTypeConverter.class)
-    /* 사전 타입 : 비식재료 필터 || 식재료 사전 */
+    /* 사전 타입 : 비식재료 필터 || 식재료 사전 || 브랜드명 매칭 사전 */
     private REFRecognitionDictionaryType dictType;
 
     @Embedded
@@ -73,6 +73,10 @@ public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecogniti
 
     public static REFRecognitionDictionary createIngredientDictionary(String name) {
         return create(REFRecognitionDictionaryType.GROCERY_ITEM, name);
+    }
+
+    public static REFRecognitionDictionary createBrandDictionary(String name) {
+        return create(REFRecognitionDictionaryType.BRAND, name);
     }
 
     private static REFRecognitionDictionary create(REFRecognitionDictionaryType dictType, String name) {
