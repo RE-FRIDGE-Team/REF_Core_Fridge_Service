@@ -2,6 +2,7 @@ package com.refridge.core_server.product.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.product.domain.vo.*;
+import com.refridge.core_server.product.infra.converter.REFProductStatusConverter;
 import com.refridge.core_server.product.infra.converter.REFProductTypeConverter;
 import jakarta.persistence.*;
 import lombok.*;
@@ -44,6 +45,10 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     @Column(name = "product_type", nullable = false, length = 20)
     @Convert(converter = REFProductTypeConverter.class)
     private REFProductType productType;
+
+    @Column(name = "status", nullable = false, length = 20)
+    @Convert(converter = REFProductStatusConverter.class)
+    private REFProductStatus status;
 
     @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
