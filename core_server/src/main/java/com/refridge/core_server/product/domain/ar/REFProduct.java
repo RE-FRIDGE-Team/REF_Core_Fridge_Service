@@ -1,8 +1,7 @@
 package com.refridge.core_server.product.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
-import com.refridge.core_server.product.domain.vo.REFBrandName;
-import com.refridge.core_server.product.domain.vo.REFProductName;
+import com.refridge.core_server.product.domain.vo.*;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.domain.AbstractAggregateRoot;
@@ -34,6 +33,12 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
 
     @Embedded
     private REFBrandName brandName;
+
+    @Embedded
+    private REFProductVolume productVolume;
+
+    @Embedded
+    private REFProductQuantity productQuantity;
 
     @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
