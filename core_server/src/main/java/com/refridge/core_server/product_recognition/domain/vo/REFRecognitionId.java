@@ -3,6 +3,7 @@ package com.refridge.core_server.product_recognition.domain.vo;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.UUID;
@@ -12,6 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
 public class REFRecognitionId {
 
+    @Getter
     @Column(name = "recognition_id")
     private UUID value;
 

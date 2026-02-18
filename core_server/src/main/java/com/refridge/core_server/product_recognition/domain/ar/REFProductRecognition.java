@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @SuppressWarnings("NullableProblems")
@@ -129,5 +130,13 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         this.status = REFProductRecognitionStatus.COMPLETED;
         this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
         this.completedAt = LocalDateTime.now();
+    }
+
+    public UUID getIdValue(){
+        return this.id.getValue();
+    }
+
+    public UUID getRequesterIdValue(){
+        return this.requesterId.getId();
     }
 }
