@@ -61,11 +61,10 @@ public class REFProductRecognitionAppService {
     }
 
     private void publishCompletionEvent(REFRecognitionContext ctx) {
-        // TODO: recognitionId를 recognition AR에서 꺼내는 방법 필요 (getter 추가 또는 이벤트에서 AR 참조)
         eventPublisher.publishEvent(new REFRecognitionCompletedEvent(
-                null, // recognitionId - TODO
-                null, // requesterId - TODO
-                ctx.getRecognition().getProcessingPath(), // getter 추가 필요
+                ctx.getRecognition().getIdValue(),
+                ctx.getRecognition().getRequesterIdValue().toString(),
+                ctx.getRecognition().getProcessingPath(),
                 ctx.getOutput() == null
         ));
     }
