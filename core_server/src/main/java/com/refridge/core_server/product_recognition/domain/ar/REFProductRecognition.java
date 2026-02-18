@@ -8,6 +8,7 @@ import com.refridge.core_server.product_recognition.infra.converter.REFRecogniti
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
@@ -39,6 +40,7 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
     @Convert(converter = REFProductRecognitionStatusConverter.class)
     private REFProductRecognitionStatus status;
 
+    @Getter
     @Column(name = "processing_path")
     @Convert(converter = REFRecognitionProcessingPathConverter.class)
     private REFRecognitionProcessingPath processingPath;
