@@ -5,7 +5,6 @@ import com.refridge.core_server.product_recognition.application.dto.result.REFRe
 import com.refridge.core_server.product_recognition.domain.ar.REFProductRecognition;
 import com.refridge.core_server.product_recognition.domain.event.REFRecognitionCompletedEvent;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
-import com.refridge.core_server.product_recognition.domain.service.REFProductRecognitionDomainService;
 import com.refridge.core_server.product_recognition.domain.REFProductRecognitionRepository;
 import com.refridge.core_server.product_recognition.domain.service.REFRecognitionPipeline;
 import com.refridge.core_server.product_recognition.infra.pipeline.*;
