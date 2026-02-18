@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class REFMLPredictionHandler implements REFRecognitionHandler {
 
+    // TODO : MLPredictionClient 구현체 개발 필요. 포트 -> 도메인 / 포트 구현체 -> 인프라
     private final REFMLPredictionClient mlPredictionClient;
 
     @Override

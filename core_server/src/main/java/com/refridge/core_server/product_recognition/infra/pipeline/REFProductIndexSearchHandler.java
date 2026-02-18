@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class REFProductIndexSearchHandler implements REFRecognitionHandler {
 
+    // TODO : Product 도메인과 연동할 수 있는 포트 개발. 포트 -> 도메인 / 포트 구현체 -> 인프라
     private final REFProductIndexSearcher productIndexSearcher;
 
     @Override

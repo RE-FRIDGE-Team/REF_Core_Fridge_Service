@@ -22,6 +22,7 @@ public class REFGroceryItemDictMatchHandler implements REFRecognitionHandler {
 
     private final REFGroceryItemDictionaryMatcher groceryItemDictionaryMatcher;
 
+    // TODO : GroceryItemContext와 연동할 수 있는 포트 개발. 포트 -> 도메인 / 포트 구현체 -> 인프라
 
     @Override
     public void handle(REFRecognitionContext context) {
