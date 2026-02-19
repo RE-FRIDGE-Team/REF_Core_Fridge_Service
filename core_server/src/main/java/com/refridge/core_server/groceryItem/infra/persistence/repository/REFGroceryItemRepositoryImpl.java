@@ -1,11 +1,13 @@
 package com.refridge.core_server.groceryItem.infra.persistence.repository;
 
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepositoryCustom;
 import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemStatus;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemSummarizedDTO;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -13,12 +15,16 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.refridge.core_server.groceryItem.domain.ar.QREFGroceryItem.rEFGroceryItem;
+import static com.refridge.core_server.grocery_category.domain.ar.QREFMajorGroceryCategory.rEFMajorGroceryCategory;
+import static com.refridge.core_server.grocery_category.domain.ar.QREFMinorGroceryCategory.rEFMinorGroceryCategory;
 
 @Repository
 @RequiredArgsConstructor
 public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCustom {
 
     private final JPAQueryFactory jpaQueryFactory;
+
+    private static final String CATEGORY_PATH_SEPARATOR = " > ";
 
     /**
      * 단건 요약 DTO 조회
@@ -124,5 +130,50 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                 .where(rEFGroceryItem.id.in(ids),
                         rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE))
                 .fetch();
+    }
+
+    /**
+     * 식재료 이름으로 GroceryItem 조회 (카테고리 경로 포함).
+     * 실행 쿼리: 1개 (JOIN 2회)
+     * - GroceryItem → MajorCategory → MinorCategory
+     * - CategoryPath는 "대분류명 > 중분류명" 형식으로 조합
+     *
+     * @param groceryItemName 식재료 이름
+     * @return 식재료 정보 + 카테고리 경로
+     */
+    @Override
+    public Optional<REFGroceryItemWithCategoryPathDto> findByGroceryItemName(String groceryItemName) {
+        if (groceryItemName == null || groceryItemName.isBlank()) {
+            return Optional.empty();
+        }
+
+        REFGroceryItemWithCategoryPathDto result = jpaQueryFactory
+                .select(Projections.constructor(
+                        REFGroceryItemWithCategoryPathDto.class,
+                        rEFGroceryItem.id,
+                        rEFGroceryItem.groceryItemName.value,
+                        // CategoryPath: "대분류명 > 중분류명" 형식으로 조합
+                        Expressions.stringTemplate(
+                                "CONCAT({0}, {1}, {2})",
+                                rEFMajorGroceryCategory.categoryName.value,
+                                Expressions.constant(CATEGORY_PATH_SEPARATOR),
+                                rEFMinorGroceryCategory.categoryName.value
+                        ),
+                        rEFGroceryItem.representativeImage.presignedUrl
+                ))
+                .from(rEFGroceryItem)
+                // MajorCategory JOIN
+                .innerJoin(rEFMajorGroceryCategory)
+                .on(rEFMajorGroceryCategory.id.eq(rEFGroceryItem.groceryCategoryReference.majorCategoryId))
+                // MinorCategory JOIN
+                .innerJoin(rEFMinorGroceryCategory)
+                .on(rEFMinorGroceryCategory.id.eq(rEFGroceryItem.groceryCategoryReference.minorCategoryId))
+                .where(
+                        rEFGroceryItem.groceryItemName.value.eq(groceryItemName),
+                        rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
+                )
+                .fetchOne();
+
+        return Optional.ofNullable(result);
     }
 }

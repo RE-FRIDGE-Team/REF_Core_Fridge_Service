@@ -116,13 +116,6 @@ public class REFGroceryItemQueryService {
                 .toList();
     }
 
-    /**
-     * 입력 텍스트와 가장 유사한 제품명(alias)을 찾아
-     * 매핑된 GroceryItem 정보를 반환한다.
-     */
-    public Optional<REFGroceryItemProductNameMatchResult> searchByProductName(String input) {
-        return refGroceryItemRepository.findBestMatchByProductName(input);
-    }
 
     private REFGroceryItemDetailInfoResult mappingResultFromDto(REFGroceryItemDetailDTO dto) {
         REFGroceryItemDetailInfoResult result = refGroceryItemInformationMapper.toDetailResult(dto);

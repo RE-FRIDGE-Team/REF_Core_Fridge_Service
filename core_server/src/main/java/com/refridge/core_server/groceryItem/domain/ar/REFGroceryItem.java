@@ -177,4 +177,7 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
         this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
     }
 
+    public String getCategoryNameValue(){
+        return this.groceryItemName.getValue();
+    }
 }
