@@ -4,6 +4,7 @@ import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
 import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemQueryClient;
 import com.refridge.core_server.product_recognition.infra.dto.REFRecognizedGroceryItemDto;
+import com.refridge.core_server.product_recognition.infra.mapper.REFRecognizedGroceryItemDtoMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import java.util.Optional;
 public class REFGroceryItemQueryAdapter implements REFGroceryItemQueryClient {
 
     private final REFGroceryItemRepository repository;
+    private final REFRecognizedGroceryItemDtoMapper mapper;
 
     @Override
     public Optional<REFRecognizedGroceryItemDto> getItemByName(String itemName) {
@@ -25,19 +27,6 @@ public class REFGroceryItemQueryAdapter implements REFGroceryItemQueryClient {
         }
 
         return repository.findByGroceryItemName(itemName)
-                .map(this::toRecognizedDto);
-    }
-
-    /**
-     * GroceryItem Context의 DTO를 ProductRecognition Context의 DTO로 변환.
-     * Anti-Corruption Layer 역할 수행.
-     */
-    private REFRecognizedGroceryItemDto toRecognizedDto(REFGroceryItemWithCategoryPathDto dto) {
-        return REFRecognizedGroceryItemDto.of(
-                dto.groceryItemId(),
-                dto.groceryItemName(),
-                dto.categoryPath(),
-                dto.representativeImageUrl()
-        );
+                .map(mapper::toRecognizedDto);
     }
 }
