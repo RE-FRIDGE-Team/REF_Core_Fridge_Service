@@ -2,6 +2,7 @@ package com.refridge.core_server.groceryItem.domain;
 
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemSummarizedDTO;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,4 +13,6 @@ public interface REFGroceryItemRepositoryCustom {
 
     Optional<REFGroceryItemDetailDTO> findDetailDTOById(Long id);
     List<REFGroceryItemDetailDTO> findAllDetailDTOsByIds(List<Long> ids);
+
+    Optional<REFGroceryItemWithCategoryPathDto> findByGroceryItemName(String groceryItemName);
 }

@@ -3,6 +3,7 @@ package com.refridge.core_server.product_recognition.infra.pipeline;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionHandler;
 import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemDictionaryMatcher;
+import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemQueryClient;
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,7 @@ public class REFGroceryItemDictMatchHandler implements REFRecognitionHandler {
 
     private final REFGroceryItemDictionaryMatcher groceryItemDictionaryMatcher;
 
-    // TODO : GroceryItemContext와 연동할 수 있는 포트 개발. 포트 -> 도메인 / 포트 구현체 -> 인프라
+    private final REFGroceryItemQueryClient groceryItemQueryClient;
 
     @Override
     public void handle(REFRecognitionContext context) {
@@ -30,22 +31,30 @@ public class REFGroceryItemDictMatchHandler implements REFRecognitionHandler {
 
         groceryItemDictionaryMatcher.findMatch(inputText)
                 .ifPresent(matchInfo -> {
-                    // TODO: GroceryItem Context 포트를 통해 상세 정보 조회 필요
-                    // REFProductRecognitionOutput output = groceryItemQueryPort.findByName(matchInfo.matchedGroceryItemName())
-                    //         .map(item -> REFProductRecognitionOutput.of(...))
-                    //         .orElse(null);
-                    // 현재는 임시로 이름만 세팅
-                    REFProductRecognitionOutput output = REFProductRecognitionOutput.of(
-                            0L, // TODO: 실제 ID로 교체
-                            matchInfo.matchedGroceryItemName(),
-                            "UNKNOWN", // TODO: 실제 카테고리로 교체
-                            null
-                    );
-                    context.getRecognition().completeWithGroceryItemDictionaryMatch(output);
-                    context.complete(output, handlerName());
+                    String matchedName = matchInfo.matchedGroceryItemName();
 
-                    log.info("식재료 사전 매칭 성공. input='{}', matched='{}'",
-                            inputText, matchInfo.matchedGroceryItemName());
+                    // GroceryItem 상세 정보 조회
+                    groceryItemQueryClient.getItemByName(matchedName)
+                            .ifPresentOrElse(
+                                    item -> {
+                                        REFProductRecognitionOutput output = REFProductRecognitionOutput.of(
+                                                item.groceryItemId(),
+                                                item.groceryItemName(),
+                                                item.categoryPath(),
+                                                item.representativeImageUrl()
+                                        );
+
+                                        context.getRecognition().completeWithGroceryItemDictionaryMatch(output);
+                                        context.complete(output, handlerName());
+
+                                        log.info("식재료 사전 매칭 성공. input='{}', matched='{}', id={}, category='{}'",
+                                                inputText, matchedName, item.groceryItemId(), item.categoryPath());
+                                    },
+                                    () -> {
+                                        log.warn("식재료 사전에서 매칭되었으나 DB 조회 실패. input='{}', matched='{}'",
+                                                inputText, matchedName);
+                                    }
+                            );
                 });
     }
 
