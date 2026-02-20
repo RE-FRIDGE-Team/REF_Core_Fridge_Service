@@ -6,6 +6,6 @@ import java.util.Optional;
 
 public interface REFProductIndexSearcher {
 
-    Optional<REFProductIndexSearchInfo> search(String input);
+    Optional<REFProductIndexSearchInfo> search(String input, String brandName);
 
 }

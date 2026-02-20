@@ -7,6 +7,8 @@ import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognit
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Optional;
+
 /**
  * Recognition 파이프라인 전반에 걸쳐 공유되는 컨텍스트.
  * 각 핸들러는 이 객체를 읽고/쓰며 다음 핸들러에 상태를 전달한다.
@@ -58,5 +60,9 @@ public class REFRecognitionContext {
             return parsedProductName.refinedText();
         }
         return rawInput;
+    }
+
+    public String getParsedBrandName() {
+        return this.parsedProductName.brandName();
     }
 }
