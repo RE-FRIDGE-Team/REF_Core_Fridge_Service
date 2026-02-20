@@ -1,7 +1,6 @@
 package com.refridge.core_server.product_recognition.infra.adapter;
 
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
-import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
 import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemQueryClient;
 import com.refridge.core_server.product_recognition.infra.dto.REFRecognizedGroceryItemDto;
 import com.refridge.core_server.product_recognition.infra.mapper.REFRecognizedGroceryItemDtoMapper;
