@@ -10,6 +10,13 @@ import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
 
+/**
+ * 제품 집계 루트.
+ * <pre>
+ * 제품의 책임:
+ * - 실제 유통되는 제품명 색인 (제품명 검색용)
+ * - GroceryItem(식재료) 매핑 (분류용)</pre>
+ */
 @Entity
 @SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
@@ -30,17 +37,16 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     )
     private Long id;
 
+    /**
+     * 정제된 제품명을 담고 있습니다.<pre>
+     * ex) "서울우유 멸균우유 200ml" -> "멸균우유"
+     * ex) "CJ 햇반 210g" -> "햇반"</pre>
+     */
     @Embedded
     private REFProductName productName;
 
     @Embedded
     private REFBrandName brandName;
-
-    @Embedded
-    private REFProductVolume productVolume;
-
-    @Embedded
-    private REFProductQuantity productQuantity;
 
     @Column(name = "product_type", nullable = false, length = 20)
     @Convert(converter = REFProductTypeConverter.class)
