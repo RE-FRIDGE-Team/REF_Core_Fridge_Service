@@ -1,8 +1,8 @@
 spring:
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
       timeout: 3000ms  # 연결 타임아웃
       lettuce:
         pool:
@@ -10,6 +10,7 @@ spring:
           max-idle: 8       # 최대 유휴 커넥션 수
           min-idle: 0       # 최소 유휴 커넥션 수
           max-wait: -1ms    # 커넥션 풀이 비었을 때 대기 시간
+      password: ${REDIS_PASSWORD}
 
 
   datasource:
