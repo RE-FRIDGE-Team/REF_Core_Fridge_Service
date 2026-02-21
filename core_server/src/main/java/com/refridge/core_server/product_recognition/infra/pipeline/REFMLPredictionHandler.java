@@ -2,6 +2,7 @@ package com.refridge.core_server.product_recognition.infra.pipeline;
 
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionHandler;
+import com.refridge.core_server.product_recognition.domain.port.REFGroceryItemQueryClient;
 import com.refridge.core_server.product_recognition.domain.port.REFMLPredictionClient;
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
 import lombok.RequiredArgsConstructor;
@@ -13,8 +14,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class REFMLPredictionHandler implements REFRecognitionHandler {
 
-    // TODO : MLPredictionClient 구현체 개발 필요. 포트 -> 도메인 / 포트 구현체 -> 인프라
     private final REFMLPredictionClient mlPredictionClient;
+    private final REFGroceryItemQueryClient groceryItemQueryClient;
 
     @Override
     public void handle(REFRecognitionContext context) {
@@ -23,20 +24,27 @@ public class REFMLPredictionHandler implements REFRecognitionHandler {
         mlPredictionClient.predict(inputText)
                 .ifPresentOrElse(
                         prediction -> {
-                            // TODO: GroceryItem 조회 포트 연동 필요
-                            REFProductRecognitionOutput output = REFProductRecognitionOutput.of(
-                                    0L, // TODO: 실제 ID로 교체
-                                    prediction.predictedGroceryItemName(),
-                                    "UNKNOWN", // TODO: 실제 카테고리로 교체
-                                    null
-                            );
-                            context.getRecognition().completeWithMLPrediction(output);
-                            context.complete(output, handlerName());
+                            groceryItemQueryClient.getItemByName(prediction.predictedGroceryItemName())
+                                    .ifPresentOrElse(
+                                            item -> {
+                                                REFProductRecognitionOutput output = REFProductRecognitionOutput.of(
+                                                        item.groceryItemId(),
+                                                        item.groceryItemName(),
+                                                        item.categoryPath(),
+                                                        item.representativeImageUrl()
+                                                );
 
-                            log.info("ML 예측 성공. input='{}', predicted='{}', confidence={}",
-                                    inputText,
-                                    prediction.predictedGroceryItemName(),
-                                    prediction.confidence());
+                                                context.getRecognition().completeWithMLPrediction(output);
+                                                context.complete(output, handlerName());
+
+                                                log.info("ML 예측 성공. input='{}', matched='{}', id={}, category='{}'",
+                                                        inputText, prediction.predictedGroceryItemName(), item.groceryItemId(), item.categoryPath());
+                                            },
+                                            () -> {
+                                                log.warn("ML 예측 결과 DB 조회 실패. input='{}', matched='{}'",
+                                                        inputText, prediction.predictedGroceryItemName());
+                                            }
+                                    );
                         },
                         () -> {
                             // ML도 실패 → 최종 NO_MATCH
