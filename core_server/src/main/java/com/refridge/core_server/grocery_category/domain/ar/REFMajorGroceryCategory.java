@@ -16,6 +16,11 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * {@code REFMajorGroceryCategory}는 식료품 대분류 카테고리를 나타내는 JPA 엔티티입니다.<p>
+ * 대분류 카테고리는 여러 개의 중분류 카테고리를 포함할 수 있으며, 대분류 카테고리의 이름과 생성/수정 시점 등의 메타데이터를 관리합니다.<p>
+ * 대분류 카테고리는 {@code REFCategoryColorTag}를 포함하고 있으며, DB에는 저장하지 않고 자체 로직을 통해 계산합니다.
+ */
 @Entity
 @SuppressWarnings("NullableProblems")
 @Table(name = "ref_major_grocery_category")
