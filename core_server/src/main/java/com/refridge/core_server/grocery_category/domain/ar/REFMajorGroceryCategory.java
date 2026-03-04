@@ -5,7 +5,9 @@ import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryR
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.vo.REFCategoryColorTag;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
+import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import com.refridge.core_server.grocery_category.domain.vo.REFMajorCategoryTypeGroup;
+import com.refridge.core_server.grocery_category.domain.vo.REFMinorCategoryCreationData;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -138,10 +140,11 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
     }
 
     /* BUSINESS LOGIC : 이 대분류의 하위 중분류 카테고리를 추가한다. */
-    protected REFMinorGroceryCategory addMinorCategoryViaMajorCategory(String newMinorCategoryName) {
+    protected REFMinorGroceryCategory addMinorCategoryViaMajorCategory(String newMinorCategoryName,
+                                                                       REFInventoryItemType itemType) {
         return ensurePersisted()
                 .flatMap(major -> validateMinorCategoryName(newMinorCategoryName))
-                .map(name -> REFMinorGroceryCategory.create(name, this))
+                .map(name -> REFMinorGroceryCategory.create(name, this, itemType))
                 .map(minor -> {
                     this.minorCategories.add(minor);
                     return minor;
@@ -152,30 +155,32 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
     /* BUSINESS LOGIC : 이 대분류의 하위 중분류 카테고리를 추가하고 저장한다. */
     public REFMinorGroceryCategory addMinorCategoryAndSaveViaMajorCategory(
             String minorCategoryName,
+            String itemTypeName,
             REFMinorGroceryCategoryRepository repository
     ) {
         return Optional.of(minorCategoryName)
-                .map(this::addMinorCategoryViaMajorCategory)
+                .map(name -> addMinorCategoryViaMajorCategory(name, REFInventoryItemType.valueOf(itemTypeName)))
                 .map(repository::save)
                 .orElseThrow(() -> new IllegalStateException("중분류 저장에 실패했습니다."));
     }
 
     /* BUSINESS LOGIC : 이 대분류의 하위 중분류 카테고리 여러 개를 추가한다.*/
-    protected List<REFMinorGroceryCategory> addMinorCategoriesViaMajorCategory(List<String> minorCategoryNames) {
-        return Optional.ofNullable(minorCategoryNames)
-                .filter(names -> !names.isEmpty())
+    protected List<REFMinorGroceryCategory> addMinorCategoriesViaMajorCategory(
+            List<REFMinorCategoryCreationData> minorCategoryDataList) {
+        return Optional.ofNullable(minorCategoryDataList)
+                .filter(list -> !list.isEmpty())
                 .stream()
                 .flatMap(Collection::stream)
-                .map(this::addMinorCategoryViaMajorCategory)
+                .map(data -> addMinorCategoryViaMajorCategory(data.name(), data.itemType()))
                 .collect(Collectors.toList());
     }
 
     /* BUSINESS LOGIC : 이 대분류의 하위 중분류 카테고리 여러 개를 추가하고 저장한다.*/
     public List<REFMinorGroceryCategory> addMinorCategoriesAndSaveViaMajorCategory(
-            List<String> minorCategoryNames,
+            List<REFMinorCategoryCreationData> minorCategoryDataList,
             REFMinorGroceryCategoryRepository repository
     ) {
-        return Optional.of(minorCategoryNames)
+        return Optional.of(minorCategoryDataList)
                 .map(this::addMinorCategoriesViaMajorCategory)
                 .map(repository::saveAll)
                 .orElse(Collections.emptyList());
