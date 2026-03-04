@@ -16,6 +16,7 @@ import lombok.Builder;
  */
 @Builder
 public record REFMajorCategoryCreationCommand(
-        String majorCategoryName
+        String majorCategoryName,
+        String majorCategoryTypeGroupName
 ) {
 }
