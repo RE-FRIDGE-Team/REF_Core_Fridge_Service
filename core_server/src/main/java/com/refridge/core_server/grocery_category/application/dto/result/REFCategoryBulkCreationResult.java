@@ -13,7 +13,7 @@ import java.util.List;
  */
 // TODO : 초기 카테고리 자동생성 Initializer 구현 해야 함.
 @Builder
-public record REFCategoryBulkInsertResult(
+public record REFCategoryBulkCreationResult(
         REFMajorCategoryCreationResult majorCategoryCreationResult,
         List<REFMinorCategoryCreationResult> minorCategoryCreationResult
 ) {
