@@ -1,6 +1,7 @@
 package com.refridge.core_server.grocery_category.application;
 
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
+import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryCreationCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkInsertResult;
@@ -10,6 +11,8 @@ import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryR
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.ar.REFMajorGroceryCategory;
 import com.refridge.core_server.grocery_category.domain.ar.REFMinorGroceryCategory;
+import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
+import com.refridge.core_server.grocery_category.domain.vo.REFMinorCategoryCreationData;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +36,10 @@ public class REFCategoryLifeCycleService {
     @Transactional
     public REFMajorCategoryCreationResult createMajorCategoryByCategory(REFMajorCategoryCreationCommand command) {
         return Optional.ofNullable(command)
-                .map(cmd -> REFMajorGroceryCategory.createAndSave(cmd.majorCategoryName(), cmd.majorCategoryTypeGroupName(), majorCategoryRepository))
+                .map(cmd -> REFMajorGroceryCategory.createAndSave(
+                        cmd.majorCategoryName(),
+                        cmd.majorCategoryTypeGroupName(),
+                        majorCategoryRepository))
                 .map(REFMajorGroceryCategory::getId)
                 .map(REFMajorCategoryCreationResult::new)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
@@ -53,6 +59,7 @@ public class REFCategoryLifeCycleService {
                 .map(majorCategory ->
                         majorCategory.addMinorCategoryAndSaveViaMajorCategory(
                                 command.minorCategoryName(),
+                                command.itemType(),
                                 minorCategoryRepository))
                 .map(REFMinorGroceryCategory::getId)
                 .map(REFMinorCategoryCreationResult::new)
@@ -67,14 +74,18 @@ public class REFCategoryLifeCycleService {
      * @return REFCategoryBulkInsertResult
      */
     @Transactional
-    public REFCategoryBulkInsertResult createMajorCategoryWithBulkMinorCategories(REFMajorCategoryCreationCommand majorCommand, List<REFMinorCategoryCreationCommand> minorCommands) {
+    public REFCategoryBulkInsertResult createMajorCategoryWithBulkMinorCategories(
+            REFMajorCategoryCreationCommand majorCommand,
+            List<REFMinorCategoryCreationCommand> minorCommands) {
 
         REFMajorGroceryCategory majorCategory = REFMajorGroceryCategory.createAndSave(
-                majorCommand.majorCategoryName(), majorCommand.majorCategoryTypeGroupName(), majorCategoryRepository);
+                majorCommand.majorCategoryName(),
+                majorCommand.majorCategoryTypeGroupName(),
+                majorCategoryRepository);
 
         List<REFMinorGroceryCategory> savedMinors = majorCategory
                 .addMinorCategoriesAndSaveViaMajorCategory(
-                        extractMinorCategoryNames(minorCommands), minorCategoryRepository);
+                        toCreationDataList(minorCommands), minorCategoryRepository);
 
         List<REFMinorCategoryCreationResult> minorResults = savedMinors.stream()
                 .map(minor -> new REFMinorCategoryCreationResult(minor.getId()))
@@ -115,9 +126,10 @@ public class REFCategoryLifeCycleService {
         // TODO : 중분류 카테고리 제거 시 연관된 식재료들의 카테고리 처리 로직 필요, 중분류 삭제 이벤트 발행
     }
 
-    private List<String> extractMinorCategoryNames(List<REFMinorCategoryCreationCommand> commands) {
+    /* INTERNAL METHOD : Command 리스트를 도메인 레이어의 CreationData 리스트로 변환한다. */
+    private List<REFMinorCategoryCreationData> toCreationDataList(List<REFMinorCategoryCreationCommand> commands) {
         return commands.stream()
-                .map(REFMinorCategoryCreationCommand::minorCategoryName)
+                .map(cmd -> new REFMinorCategoryCreationData(cmd.minorCategoryName(), REFInventoryItemType.valueOf(cmd.itemType())))
                 .toList();
     }
 }

@@ -18,6 +18,7 @@ import lombok.Builder;
 @Builder
 public record REFMinorCategoryCreationCommand (
         String minorCategoryName,
+        String itemType,
         Long majorCategoryId
 ) {
 }

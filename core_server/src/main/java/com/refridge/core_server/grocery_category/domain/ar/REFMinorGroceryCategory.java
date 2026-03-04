@@ -4,6 +4,7 @@ import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryPathSeparator;
+import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -34,6 +35,10 @@ public class REFMinorGroceryCategory extends AbstractAggregateRoot<REFMinorGroce
     @JoinColumn(name = "major_category_id", nullable = false)
     private REFMajorGroceryCategory majorCategory;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "item_type", nullable = false)
+    private REFInventoryItemType itemType;
+
     @Embedded
     private REFEntityTimeMetaData timeMetaData;
 
@@ -56,17 +61,23 @@ public class REFMinorGroceryCategory extends AbstractAggregateRoot<REFMinorGroce
     }
 
     /* INTERNAL CONSTRUCTOR */
-    private REFMinorGroceryCategory(REFGroceryCategoryName categoryName, REFMajorGroceryCategory majorCategory) {
+    private REFMinorGroceryCategory(REFGroceryCategoryName categoryName,
+                                    REFMajorGroceryCategory majorCategory,
+                                    REFInventoryItemType itemType) {
         this.categoryName = categoryName;
         this.majorCategory = majorCategory;
+        this.itemType = itemType;
     }
 
     /* CREATION FACTORY METHOD */
-    public static REFMinorGroceryCategory create(String categoryName, REFMajorGroceryCategory majorCategory) {
+    public static REFMinorGroceryCategory create(String categoryName,
+                                                 REFMajorGroceryCategory majorCategory,
+                                                 REFInventoryItemType itemType) {
         return Optional.ofNullable(majorCategory)
                 .map(major -> new REFMinorGroceryCategory(
                         REFGroceryCategoryName.of(categoryName),
-                        major
+                        major,
+                        itemType
                 ))
                 .filter(minorCategory -> REFMinorGroceryCategory.isValidCategoryNameCondition(minorCategory.getMinorCategoryNameText()))
                 .orElseThrow(() -> new IllegalArgumentException("대분류는 필수입니다."));
@@ -76,9 +87,10 @@ public class REFMinorGroceryCategory extends AbstractAggregateRoot<REFMinorGroce
     public static REFMinorGroceryCategory createAndSave(
             String categoryName,
             REFMajorGroceryCategory majorCategory,
+            REFInventoryItemType itemType,
             REFMinorGroceryCategoryRepository repository) {
 
-        return Optional.ofNullable(REFMinorGroceryCategory.create(categoryName, majorCategory))
+        return Optional.ofNullable(REFMinorGroceryCategory.create(categoryName, majorCategory, itemType))
                 .map(repository::save)
                 .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 중분류 카테고리 정보입니다."));
     }
