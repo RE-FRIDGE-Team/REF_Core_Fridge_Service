@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * {@link REFCategoryMetaDataWithCountRowDto} 리스트를 {@link REFCategoryHierarchyDataResult}로 변환하는 매퍼 클래스입니다.<p>
+ * infra 레이어의 DTO를 application 레이어의 결과 DTO로 변환하는 역할을 담당합니다.<p>
+ */
 @Component
 public class REFCategoryHierarchyResultMapper {
 
@@ -27,7 +31,7 @@ public class REFCategoryHierarchyResultMapper {
                     List<REFCategoryMetaDataWithCountRowDto> minorRows = entry.getValue();
 
                     // 첫 번째 row에서 대분류 이름 추출
-                    String majorName = minorRows.get(0).majorCategoryName();
+                    String majorName = minorRows.getFirst().majorCategoryName();
 
                     // 중분류 리스트 생성 (minorCategoryId가 null이면 중분류 없는 대분류)
                     List<REFCategoryHierarchyDataResult.MinorCategoryWithCount> minorCategories = minorRows.stream()
