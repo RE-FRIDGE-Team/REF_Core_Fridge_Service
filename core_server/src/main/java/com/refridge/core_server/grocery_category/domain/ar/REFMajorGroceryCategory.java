@@ -5,6 +5,7 @@ import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryR
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.vo.REFCategoryColorTag;
 import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
+import com.refridge.core_server.grocery_category.domain.vo.REFMajorCategoryTypeGroup;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -43,6 +44,10 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
     @Embedded
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type_group", nullable = false)
+    private REFMajorCategoryTypeGroup typeGroup;
 
     @Getter
     @Transient
@@ -83,37 +88,39 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
     }
 
     /* INTERNAL CONSTRUCTOR */
-    private REFMajorGroceryCategory(REFGroceryCategoryName categoryName) {
+    private REFMajorGroceryCategory(REFGroceryCategoryName categoryName, REFMajorCategoryTypeGroup typeGroup) {
         this.categoryName = categoryName;
+        this.typeGroup = typeGroup;
         this.minorCategories = new ArrayList<>();
     }
 
     /* CREATION FACTORY METHOD */
-    public static REFMajorGroceryCategory create(String categoryName) {
+    public static REFMajorGroceryCategory create(String categoryName, String typeGroupName) {
         return Optional.ofNullable(categoryName)
                 .map(String::trim)
                 .filter(name -> !name.isEmpty())
                 .map(REFGroceryCategoryName::of)
-                .map(REFMajorGroceryCategory::new)
+                .map(name -> new REFMajorGroceryCategory(name, REFMajorCategoryTypeGroup.valueOf(typeGroupName)))
                 .orElseThrow(() -> new IllegalArgumentException("카테고리 이름은 필수입니다."));
     }
 
     /* BUSINESS LOGIC : 새로운 대분류 카테고리를 생성하고 저장할 수 있다. */
     public static REFMajorGroceryCategory createAndSave(
             String categoryName,
+            String typeGroupName,
             REFMajorGroceryCategoryRepository repository
     ) {
         return Optional.of(categoryName)
-                .map(name -> validateDuplicateNameAndCreateMajorCategory(name, repository))
+                .map(name -> validateDuplicateNameAndCreateMajorCategory(name, typeGroupName, repository))
                 .map(repository::save)
                 .orElseThrow(() -> new IllegalStateException("카테고리 생성에 실패했습니다."));
     }
 
     /* INTERNAL METHOD : 카테고리명 중복 검증 후 새 대분류 카테고리 엔티티 생성 */
     private static REFMajorGroceryCategory validateDuplicateNameAndCreateMajorCategory(
-            String newCategoryName, REFMajorGroceryCategoryRepository repository) {
+            String newCategoryName, String typeGroupName, REFMajorGroceryCategoryRepository repository) {
         validateDuplicateName(newCategoryName, repository);
-        return create(newCategoryName);
+        return create(newCategoryName, typeGroupName);
     }
 
     /* INTERNAL METHOD : 카테고리명 중복 검증 로직 */

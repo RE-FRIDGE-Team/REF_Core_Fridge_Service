@@ -33,8 +33,7 @@ public class REFCategoryLifeCycleService {
     @Transactional
     public REFMajorCategoryCreationResult createMajorCategoryByCategory(REFMajorCategoryCreationCommand command) {
         return Optional.ofNullable(command)
-                .map(REFMajorCategoryCreationCommand::majorCategoryName)
-                .map(name -> REFMajorGroceryCategory.createAndSave(name, majorCategoryRepository))
+                .map(cmd -> REFMajorGroceryCategory.createAndSave(cmd.majorCategoryName(), cmd.majorCategoryTypeGroupName(), majorCategoryRepository))
                 .map(REFMajorGroceryCategory::getId)
                 .map(REFMajorCategoryCreationResult::new)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
@@ -71,7 +70,7 @@ public class REFCategoryLifeCycleService {
     public REFCategoryBulkInsertResult createMajorCategoryWithBulkMinorCategories(REFMajorCategoryCreationCommand majorCommand, List<REFMinorCategoryCreationCommand> minorCommands) {
 
         REFMajorGroceryCategory majorCategory = REFMajorGroceryCategory.createAndSave(
-                majorCommand.majorCategoryName(), majorCategoryRepository);
+                majorCommand.majorCategoryName(), majorCommand.majorCategoryTypeGroupName(), majorCategoryRepository);
 
         List<REFMinorGroceryCategory> savedMinors = majorCategory
                 .addMinorCategoriesAndSaveViaMajorCategory(
