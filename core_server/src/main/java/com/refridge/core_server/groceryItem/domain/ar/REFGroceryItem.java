@@ -54,12 +54,6 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     /* 데이터 상태 (활성화, 삭제) */
     private REFGroceryItemStatus groceryItemStatus;
 
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "ref_grocery_item_matched_product", joinColumns = @JoinColumn(name = "item_id"))
-    /* 식재료에 매핑된 실제 상품명들 */
-    private Set<REFRealProductName> realProductNameSet = new HashSet<>();
-
     @Embedded
     /* 카테고리 참조 (FK) */
     private REFGroceryCategoryReference groceryCategoryReference;
@@ -137,29 +131,6 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     public REFRepresentativeImage changeRepresentativeImage(String representativeImageUrl) {
         return this.representativeImage = isActive() ?
                 REFRepresentativeImage.of(representativeImageUrl) : this.representativeImage;
-    }
-
-    /* BUSINESS LOGIC : 해당 식재료와 매칭되는 상품을 삽입한다. (ex. 곰곰 콩나물 > 콩나물에 소속) */
-    public void addMatchedProduct(REFRealProductName productName) {
-        if (isActive()) {
-            this.realProductNameSet.add(productName);
-        }
-    }
-
-    /* BUSINESS LOGIC : 해당 식재료와 매칭되는 상품 삭제한다. */
-    public void removeMatchedProduct(REFRealProductName productName) {
-        if (isActive()) {
-            this.realProductNameSet.remove(productName);
-        }
-    }
-
-    /* BUSINESS LOGIC : 실제품명 기반으로 매칭된 원재료 관련 정보를 획득할 수 있다. */
-    public Optional<REFGroceryItemDetailsForFridgeStock> compareToProductAndGetGroceryItemDetailsForFridgeStock(String realProductName) {
-        return Optional.ofNullable(realProductName)
-                .filter(productName -> this.realProductNameSet.contains(REFRealProductName.of(productName)))
-                .map(matchedProductName -> REFGroceryItemDetailsForFridgeStock.of(
-                        this.id, this.groceryItemName, this.representativeImage, this.groceryItemClassification, matchedProductName));
-
     }
 
     /* INTERNAL LOGIC : 활성화 상태인지 체크 */

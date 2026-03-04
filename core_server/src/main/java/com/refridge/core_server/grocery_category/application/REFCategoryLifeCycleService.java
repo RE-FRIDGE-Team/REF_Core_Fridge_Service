@@ -1,7 +1,6 @@
 package com.refridge.core_server.grocery_category.application;
 
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
-import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryCreationCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkInsertResult;
@@ -11,7 +10,6 @@ import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryR
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.ar.REFMajorGroceryCategory;
 import com.refridge.core_server.grocery_category.domain.ar.REFMinorGroceryCategory;
-import com.refridge.core_server.grocery_category.domain.vo.REFGroceryCategoryName;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
