@@ -1,10 +1,9 @@
 package com.refridge.core_server.grocery_category.application;
 
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
-import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryRemoveCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryCreationCommand;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMinorCategoryRemoveCommand;
-import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkInsertResult;
+import com.refridge.core_server.grocery_category.application.dto.result.REFCategoryBulkCreationResult;
 import com.refridge.core_server.grocery_category.application.dto.result.REFMajorCategoryCreationResult;
 import com.refridge.core_server.grocery_category.application.dto.result.REFMinorCategoryCreationResult;
 import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryRepository;
@@ -36,11 +35,11 @@ public class REFCategoryLifeCycleService {
     @Transactional
     public REFMajorCategoryCreationResult createMajorCategoryByCategory(REFMajorCategoryCreationCommand command) {
         return Optional.ofNullable(command)
-                .map(cmd -> REFMajorGroceryCategory.createAndSave(
-                        cmd.majorCategoryName(),
-                        cmd.majorCategoryTypeGroupName(),
-                        majorCategoryRepository))
+                // 비즈니스 로직에 따른 대분류 카테고리 생성 및 저장
+                .map(this::createAndSaveMajorCategoryByCommand)
+                // 생성된 카테고리 아이디 확보
                 .map(REFMajorGroceryCategory::getId)
+                // 결과 DTO로 변환
                 .map(REFMajorCategoryCreationResult::new)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
     }
@@ -54,13 +53,12 @@ public class REFCategoryLifeCycleService {
     @Transactional
     public REFMinorCategoryCreationResult createMinorCategoryByCategory(REFMinorCategoryCreationCommand command) {
         return Optional.ofNullable(command)
+                // 요청에서 대분류 카테고리 ID 추출 및 해당 ID로 대분류 카테고리 조회
                 .map(REFMinorCategoryCreationCommand::majorCategoryId)
                 .flatMap(majorCategoryRepository::findById)
-                .map(majorCategory ->
-                        majorCategory.addMinorCategoryAndSaveViaMajorCategory(
-                                command.minorCategoryName(),
-                                command.itemType(),
-                                minorCategoryRepository))
+                // 대분류 카테고리가 존재할 경우, 소분류 카테고리 생성 및 저장 로직 수행
+                .map(majorCategory -> this.createAndSaveMinorCategoryByCommandAndMajorCategory(majorCategory, command))
+                // 생성된 소분류 카테고리로 생성 완료 결과 DTO로 변환
                 .map(REFMinorGroceryCategory::getId)
                 .map(REFMinorCategoryCreationResult::new)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
@@ -74,27 +72,16 @@ public class REFCategoryLifeCycleService {
      * @return REFCategoryBulkInsertResult
      */
     @Transactional
-    public REFCategoryBulkInsertResult createMajorCategoryWithBulkMinorCategories(
+    public REFCategoryBulkCreationResult createMajorCategoryWithBulkMinorCategories(
             REFMajorCategoryCreationCommand majorCommand,
             List<REFMinorCategoryCreationCommand> minorCommands) {
 
-        REFMajorGroceryCategory majorCategory = REFMajorGroceryCategory.createAndSave(
-                majorCommand.majorCategoryName(),
-                majorCommand.majorCategoryTypeGroupName(),
-                majorCategoryRepository);
-
-        List<REFMinorGroceryCategory> savedMinors = majorCategory
-                .addMinorCategoriesAndSaveViaMajorCategory(
-                        toCreationDataList(minorCommands), minorCategoryRepository);
-
-        List<REFMinorCategoryCreationResult> minorResults = savedMinors.stream()
-                .map(minor -> new REFMinorCategoryCreationResult(minor.getId()))
-                .toList();
-
-        return REFCategoryBulkInsertResult.builder()
-                .majorCategoryCreationResult(new REFMajorCategoryCreationResult(majorCategory.getId()))
-                .minorCategoryCreationResult(minorResults)
-                .build();
+        return Optional.ofNullable(majorCommand)
+                // 대분류 카테고리 생성 및 저장
+                .map(this::createAndSaveMajorCategoryByCommand)
+                // 생성된 대분류 카테고리를 활용하여 다수의 소분류 카테고리 생성 및 저장, 그리고 결과 DTO로 변환
+                .map(majorCategory -> createAndSaveMinorCategoriesAndBuildBulkCreationResult(majorCategory, minorCommands))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid major category creation command"));
     }
 
     @Transactional
@@ -124,6 +111,38 @@ public class REFCategoryLifeCycleService {
                 .orElseThrow(() -> new IllegalArgumentException("Invalid major category ID"));
 
         // TODO : 중분류 카테고리 제거 시 연관된 식재료들의 카테고리 처리 로직 필요, 중분류 삭제 이벤트 발행
+    }
+
+    /* INTERNAL METHOD : Command의 내용을 통해 새로운 대분류 카테고리를 생성한다. */
+    private REFMajorGroceryCategory createAndSaveMajorCategoryByCommand(REFMajorCategoryCreationCommand command) {
+        return REFMajorGroceryCategory.createAndSave(
+                command.majorCategoryName(),
+                command.majorCategoryTypeGroupName(),
+                majorCategoryRepository);
+    }
+
+    /* INTERNAL METHOD : Command와 MajorCategory를 통해 새로운 중분류 카테고리를 생성한다. */
+    private REFMinorGroceryCategory createAndSaveMinorCategoryByCommandAndMajorCategory(REFMajorGroceryCategory majorCategory, REFMinorCategoryCreationCommand command) {
+        return majorCategory.addMinorCategoryAndSaveViaMajorCategory(
+                command.minorCategoryName(),
+                command.itemType(),
+                minorCategoryRepository);
+    }
+
+    private REFCategoryBulkCreationResult createAndSaveMinorCategoriesAndBuildBulkCreationResult(
+            REFMajorGroceryCategory majorCategory,
+            List<REFMinorCategoryCreationCommand> minorCommands) {
+
+        List<REFMinorCategoryCreationResult> minorResults = majorCategory
+                .addMinorCategoriesAndSaveViaMajorCategory(toCreationDataList(minorCommands), minorCategoryRepository)
+                .stream()
+                .map(minor -> new REFMinorCategoryCreationResult(minor.getId()))
+                .toList();
+
+        return REFCategoryBulkCreationResult.builder()
+                .majorCategoryCreationResult(new REFMajorCategoryCreationResult(majorCategory.getId()))
+                .minorCategoryCreationResult(minorResults)
+                .build();
     }
 
     /* INTERNAL METHOD : Command 리스트를 도메인 레이어의 CreationData 리스트로 변환한다. */
