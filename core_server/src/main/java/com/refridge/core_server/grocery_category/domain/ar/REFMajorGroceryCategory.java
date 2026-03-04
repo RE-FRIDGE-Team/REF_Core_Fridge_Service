@@ -44,6 +44,7 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
     /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
+    @Getter
     @Transient
     private transient REFCategoryColorTag categoryColorTag;
 
@@ -65,11 +66,17 @@ public class REFMajorGroceryCategory extends AbstractAggregateRoot<REFMajorGroce
         }
     }
 
+    /**
+     * 영속성 저장 후 카테고리 태그 컬러 아이디 기반 생성
+     */
     @PostPersist
     protected void onPostPersist() {
         this.categoryColorTag = REFCategoryColorTag.fromMajorCategoryId(this.id);
     }
 
+    /**
+     * 영속성 로드 후 카테고리 태그 컬러 아이디 기반 생성
+     */
     @PostLoad
     protected void onPostLoad() {
         this.categoryColorTag = REFCategoryColorTag.fromMajorCategoryId(this.id);
