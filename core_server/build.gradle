@@ -61,6 +61,12 @@ dependencies {
     annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
     annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
 
+    // BOM으로 버전 관리
+    implementation(platform("me.paulschwarz:spring-dotenv-bom:5.1.0"))
+
+    // Spring Boot 4 전용 아티팩트, 로컬 개발 전용
+    developmentOnly("me.paulschwarz:springboot4-dotenv")
+
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'com.mysql:mysql-connector-j'
 

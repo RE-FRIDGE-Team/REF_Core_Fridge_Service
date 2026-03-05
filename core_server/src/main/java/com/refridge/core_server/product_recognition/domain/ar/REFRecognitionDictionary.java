@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 @Entity
 @SuppressWarnings("NullableProblems")
-@Table(name = "ref_product_recognition")
+@Table(name = "ref_recognition_dictionary")
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecognitionDictionary> {
@@ -81,6 +81,7 @@ public class REFRecognitionDictionary extends AbstractAggregateRoot<REFRecogniti
 
     private static REFRecognitionDictionary create(REFRecognitionDictionaryType dictType, String name) {
         REFRecognitionDictionary dictionary = new REFRecognitionDictionary();
+        dictionary.id = REFRecognitionDictionaryId.generate();
         dictionary.dictType = dictType;
         dictionary.dictName = REFRecognitionDictionaryName.of(name);
         dictionary.version = 0;
