@@ -1,15 +1,22 @@
 package com.refridge.core_server.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import java.time.Duration;
 
@@ -58,5 +65,44 @@ public class REFRedisConfig {
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory factory) {
         return new StringRedisTemplate(factory);
+    }
+
+    /**
+     * {@code CacheManager} 빈을 생성합니다.<p>
+     * {@code @Cacheable}, {@code @CacheEvict}, {@code @CachePut} 어노테이션 기반 캐싱을 지원합니다.<p>
+     *
+     * <p>Spring Data Redis 4.0의 {@code GenericJacksonJsonRedisSerializer} 빌더를 사용합니다.<p>
+     * {@code BasicPolymorphicTypeValidator}로 허용 타입을 {@code java.} 및 프로젝트 패키지로 제한합니다.
+     *
+     * @return {@code RedisCacheManager}
+     */
+    @Bean
+    public CacheManager cacheManager(RedisConnectionFactory factory) {
+        // BasicPolymorphicTypeValidator: public API로 허용할 타입 패키지를 명시적으로 제한
+        // 역직렬화 시 허용되지 않은 타입이 들어오면 예외를 던져 보안 취약점을 방지합니다.
+        var typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfBaseType(Object.class)          // 모든 Object 허용 (프로젝트 내부 DTO용)
+                .allowIfSubType("java.")                // java 표준 라이브러리 허용
+                .allowIfSubType("com.refridge.")        // 프로젝트 패키지만 허용
+                .build();
+
+        GenericJacksonJsonRedisSerializer valueSerializer =
+                GenericJacksonJsonRedisSerializer.builder()
+                        .enableDefaultTyping(typeValidator)
+                        .build();
+
+        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofMinutes(30))           // 기본 TTL 30분
+                .serializeKeysWith(
+                        RedisSerializationContext.SerializationPair
+                                .fromSerializer(new StringRedisSerializer()))
+                .serializeValuesWith(
+                        RedisSerializationContext.SerializationPair
+                                .fromSerializer(valueSerializer))
+                .disableCachingNullValues();                // null 캐싱 방지
+
+        return RedisCacheManager.builder(factory)
+                .cacheDefaults(config)
+                .build();
     }
 }
