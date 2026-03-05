@@ -15,7 +15,7 @@ import lombok.Builder;
  * @param minorCategoryName
  * @param majorCategoryId
  */
-@Builder
+@Builder(toBuilder = true)
 public record REFMinorCategoryCreationCommand (
         String minorCategoryName,
         String itemType,
