@@ -147,7 +147,8 @@ public class REFGroceryCategoryDataInitializer implements ApplicationRunner {
         ClassPathResource resource = new ClassPathResource(INIT_DATA_PATH);
         return objectMapper.readValue(
                 resource.getInputStream(),
-                new TypeReference<>() {}
+                new TypeReference<>() {
+                }
         );
     }
 }
