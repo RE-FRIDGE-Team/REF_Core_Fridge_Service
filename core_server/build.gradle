@@ -78,6 +78,9 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 
+    // Apache Commons CSV (CSV 파싱)
+    implementation("org.apache.commons:commons-csv:1.14.1")
+
     // Aho-Corasick 알고리즘 (비식재료 필터, 식재료 사전 매칭)
     implementation 'org.ahocorasick:ahocorasick:0.6.3'
 

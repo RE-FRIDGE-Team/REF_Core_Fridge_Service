@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 @Entity
 @SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
-@Table(name = "ref_grocery_item")
+@Table(name = "ref_product")
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFProduct extends AbstractAggregateRoot<REFProduct> {
@@ -83,6 +83,24 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
             timeMetaData = timeMetaData.updateModifiedAt(now);
         }
     }
-
-
+    /**
+     * CSV 부트스트랩용 팩토리 메서드.
+     * productType: 일단 전부 GENERIC으로 적재, 추후 배치 보정 예정
+     */
+    public static REFProduct create(
+            String productName,
+            String brandName,
+            Long groceryItemId,
+            Long majorCategoryId,
+            Long minorCategoryId
+    ) {
+        return REFProduct.builder()
+                .productName(REFProductName.of(productName))
+                .brandName(REFBrandName.of(brandName))
+                .groceryItemReference(REFGroceryItemReference.of(groceryItemId, majorCategoryId, minorCategoryId))
+                .productType(REFProductType.GENERIC)
+                .status(REFProductStatus.ACTIVE)
+                .isVirtual(false)
+                .build();
+    }
 }

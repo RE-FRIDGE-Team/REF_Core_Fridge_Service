@@ -1,4 +1,4 @@
-package com.refridge.core_server.grocery_category.infra.init.dto;
+package com.refridge.core_server.bootstrap.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

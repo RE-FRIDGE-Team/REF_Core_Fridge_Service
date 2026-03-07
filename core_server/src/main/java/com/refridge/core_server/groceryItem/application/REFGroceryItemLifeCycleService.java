@@ -2,9 +2,12 @@ package com.refridge.core_server.groceryItem.application;
 
 import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemCreateCommand;
 import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemDeleteCommand;
+import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemUpsertResult;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
-import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
+import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemForUpsertDto;
+import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +22,7 @@ import java.util.stream.Stream;
 public class REFGroceryItemLifeCycleService {
 
     private final REFGroceryItemRepository refGroceryItemRepository;
-    private final REFGroceryItemCategoryValidatorService refGroceryItemCategoryValidatorService;
+    private final REFGroceryItemCategoryValidateAndAdaptService refGroceryItemCategoryValidateAndAdaptService;
 
     @Transactional
     public Long createGroceryItem(REFGroceryItemCreateCommand createCommand) {
@@ -35,13 +38,29 @@ public class REFGroceryItemLifeCycleService {
         List<REFGroceryItem> commandItemBulk = Optional.ofNullable(createCommands)
                 .orElseGet(Collections::emptyList)
                 .stream()
-                .map(command -> command.toEntity(refGroceryItemCategoryValidatorService))
+                .map(command -> command.toEntity(refGroceryItemCategoryValidateAndAdaptService))
                 .toList();
 
         return Stream.of(refGroceryItemRepository.saveAll(commandItemBulk))
                 .flatMap(List::stream)
                 .map(REFGroceryItem::getId)
                 .toList();
+    }
+
+    @Transactional
+    public REFGroceryItemUpsertResult upsert(
+            String groceryItemName,
+            String majorCategoryName,
+            String subCategoryName,
+            REFInventoryItemType type) {
+
+        return refGroceryItemRepository.findForUpsertByGroceryItemName(groceryItemName)
+                // 이미 데이터가 존재하는 경우 업데이트 없이 조회 결과를 반환
+                .map(this::convertToUpsertResult)
+                // 데이터가 존재하지 않는 경우 새로 생성하여 결과 반환
+                .orElseGet(() ->
+                        createNewGroceryItemAndConvertToUpsertResult(groceryItemName, majorCategoryName, subCategoryName, type)
+                );
     }
 
     @Transactional
@@ -63,6 +82,31 @@ public class REFGroceryItemLifeCycleService {
                 .forEach(REFGroceryItem::delete);
     }
 
+    private REFGroceryItemUpsertResult convertToUpsertResult(REFGroceryItemForUpsertDto item) {
+        return new REFGroceryItemUpsertResult(
+                item.groceryItemId(),
+                item.majorCategoryId(),
+                item.minorCategoryId(),
+                false
+        );
+    }
+
+    private REFGroceryItemUpsertResult createNewGroceryItemAndConvertToUpsertResult(String groceryItemName,
+                                                                                    String majorCategoryName,
+                                                                                    String subCategoryName,
+                                                                                    REFInventoryItemType type) {
+        Long majorCategoryId = refGroceryItemCategoryValidateAndAdaptService
+                .findMajorCategoryIdByName(majorCategoryName);
+        Long minorCategoryId = refGroceryItemCategoryValidateAndAdaptService
+                .findMinorCategoryIdByName(subCategoryName);
+
+        REFGroceryItemCreateCommand command = REFGroceryItemCreateCommand.forBootstrap(
+                groceryItemName, majorCategoryId, minorCategoryId, type);
+
+        Long id = createAndSaveEntityFromCommand(command).getId();
+
+        return new REFGroceryItemUpsertResult(id, majorCategoryId, minorCategoryId, true);
+    }
 
     /* Internal Method : Domain 영역의 CreateAndSave를 짧게 사용할 수 있는 재사용성 높은 메서드 */
     private REFGroceryItem createAndSaveEntityFromCommand(REFGroceryItemCreateCommand cmd) {
@@ -72,6 +116,6 @@ public class REFGroceryItemLifeCycleService {
                 cmd.groceryItemClassification(),
                 cmd.majorCategoryId(),
                 cmd.minorCategoryId(),
-                refGroceryItemRepository, refGroceryItemCategoryValidatorService);
+                refGroceryItemRepository, refGroceryItemCategoryValidateAndAdaptService);
     }
 }

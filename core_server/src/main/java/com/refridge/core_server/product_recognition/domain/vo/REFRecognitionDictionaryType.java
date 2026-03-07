@@ -9,13 +9,14 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum REFRecognitionDictionaryType {
 
-    EXCLUSION("EX", "비식재료 필터 사전", "recognition:dict:exclusion"),
-    GROCERY_ITEM("GR", "식재료 매칭 사전","recognition:dict:grocery-item"),
-    BRAND("BR", "브랜드명 매칭 사전", "recognition:dict:brand");
+    EXCLUSION("EX", "비식재료 필터 사전", "recognition:dict:exclusion", "exclusion_dict.json"),
+    GROCERY_ITEM("GR", "식재료 매칭 사전","recognition:dict:grocery-item", "refridge_grocery_item.csv"),
+    BRAND("BR", "브랜드명 매칭 사전", "recognition:dict:brand", "brand_dict.json");
 
     private final String dbCode;
     private final String korDictName;
     private final String redisKey;
+    private final String initFileName;
 
     public static REFRecognitionDictionaryType fromDbCode(String dbData) {
         return Arrays.stream(REFRecognitionDictionaryType.values())

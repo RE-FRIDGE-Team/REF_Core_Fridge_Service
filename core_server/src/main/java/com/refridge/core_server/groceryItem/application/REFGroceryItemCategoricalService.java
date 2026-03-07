@@ -2,7 +2,7 @@ package com.refridge.core_server.groceryItem.application;
 
 import com.refridge.core_server.groceryItem.application.dto.command.REFGroceryItemCategoryChangeCommand;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
-import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
+import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.ar.REFMinorGroceryCategory;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ public class REFGroceryItemCategoricalService {
 
     private final REFGroceryItemRepository refGroceryItemRepository;
 
-    private final REFGroceryItemCategoryValidatorService refGroceryItemCategoryValidatorService;
+    private final REFGroceryItemCategoryValidateAndAdaptService refGroceryItemCategoryValidateAndAdaptService;
 
     private final REFMinorGroceryCategoryRepository refMinorGroceryCategoryRepository;
 
@@ -27,7 +27,7 @@ public class REFGroceryItemCategoricalService {
                 .ifPresent(groceryItem -> groceryItem.changeCategory(
                         categoryChangeCommand.majorCategoryId(),
                         categoryChangeCommand.minorCategoryId(),
-                        refGroceryItemCategoryValidatorService
+                        refGroceryItemCategoryValidateAndAdaptService
                 ));
     }
 
