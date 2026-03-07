@@ -4,13 +4,16 @@ package com.refridge.core_server.bootstrap;
 import com.refridge.core_server.bootstrap.dto.REFCsvProductRowDto;
 import com.refridge.core_server.groceryItem.application.REFGroceryItemLifeCycleService;
 import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemUpsertResult;
+import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemClassification;
 import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import com.refridge.core_server.product.application.REFProductLifeCycleService;
+import com.refridge.core_server.product_recognition.domain.port.REFProductNameParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.input.BOMInputStream;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -25,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
-@Order(2)
+@Order(3)
 @Component
 @RequiredArgsConstructor
 public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
@@ -35,6 +38,8 @@ public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
     private final REFGroceryItemLifeCycleService groceryItemLifeCycleService;
 
     private final REFProductLifeCycleService productLifeCycleService;
+
+    private final REFProductNameParser productNameParser;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -48,8 +53,9 @@ public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
 
         for (REFCsvProductRowDto row : rows) {
             try {
-                created += processRow(row) ? 1 : 0;
-                skipped += processRow(row) ? 0 : 1;
+                boolean isCreated = processRow(row);
+                created += isCreated ? 1 : 0;
+                skipped += isCreated ? 0 : 1;
             } catch (Exception e) {
                 // 한 행 실패가 전체를 막지 않도록 — 멱등성으로 재실행 가능
                 log.error("[CSV 초기화] 행 처리 실패: {} / 사유: {}", row.originalProductName(), e.getMessage());
@@ -63,16 +69,18 @@ public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
 
     /**
      * 한 행을 처리합니다. 트랜잭션은 각 서비스 내부에서 관리합니다.
+     *
      * @return true=신규 Product 생성, false=이미 존재하여 SKIP
      */
     private boolean processRow(REFCsvProductRowDto row) {
         // GroceryItem 컨텍스트 트랜잭션
         REFInventoryItemType itemType = REFInventoryItemType.from(row.inventoryItemType());
+        REFGroceryItemClassification classification = REFGroceryItemClassification.fromMinorCategoryNameAndInventoryTypeCode(row.subCategory(), itemType);
         REFGroceryItemUpsertResult groceryResult = groceryItemLifeCycleService.upsert(
                 row.groceryItemName(),
                 row.majorCategory(),
                 row.subCategory(),
-                itemType
+                classification
         );
 
         // Product 컨텍스트 트랜잭션
@@ -97,7 +105,9 @@ public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
 
         List<REFCsvProductRowDto> rows = new ArrayList<>();
 
-        try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8);
+        try (Reader reader = new InputStreamReader(BOMInputStream.builder()
+                .setInputStream(resource.getInputStream())
+                .get(), StandardCharsets.UTF_8);
              CSVParser parser = CSVFormat.DEFAULT
                      .builder()
                      .setHeader()
@@ -108,12 +118,12 @@ public class REFProductAndGroceryItemInitializer implements ApplicationRunner {
 
             for (CSVRecord record : parser) {
                 rows.add(new REFCsvProductRowDto(
-                        record.get("원제품명"),
-                        record.get("대분류"),
-                        record.get("중분류"),
-                        record.get("카테고리태그"),
-                        record.get("식재료명"),
-                        record.get("브랜드명")
+                        productNameParser.parse(record.get("product_name")).refinedText(),
+                        record.get("category_large"),
+                        record.get("category_medium"),
+                        record.get("item_type"),
+                        record.get("grocery_item_name"),
+                        record.get("brand_name")
                 ));
             }
 

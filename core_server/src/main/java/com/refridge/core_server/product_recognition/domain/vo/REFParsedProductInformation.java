@@ -10,7 +10,7 @@ import java.util.Optional;
  * Parser가 원본 제품명에서 추출한 구조화된 정보를 담는다.
  */
 @Builder
-public record REFParsedProductName(
+public record REFParsedProductInformation(
         String originalText,      // 원본 제품명
         String refinedText,       // 정제된 제품명 (수량/용량/브랜드/불필요요소 제거)
         String brandName,         // 추출된 브랜드명 (없으면 null)

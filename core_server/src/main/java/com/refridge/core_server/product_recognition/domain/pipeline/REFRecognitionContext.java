@@ -2,12 +2,10 @@ package com.refridge.core_server.product_recognition.domain.pipeline;
 
 
 import com.refridge.core_server.product_recognition.domain.ar.REFProductRecognition;
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductName;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.Optional;
 
 /**
  * Recognition 파이프라인 전반에 걸쳐 공유되는 컨텍스트.
@@ -23,7 +21,7 @@ public class REFRecognitionContext {
 
     // 파이프라인 실행 중 채워지는 필드
     @Setter
-    private REFParsedProductName parsedProductName;
+    private REFParsedProductInformation parsedProductName;
     private REFProductRecognitionOutput output;
     private boolean completed = false;
     private String completedBy; // 어느 단계에서 완료됐는지 (디버깅/로깅용)

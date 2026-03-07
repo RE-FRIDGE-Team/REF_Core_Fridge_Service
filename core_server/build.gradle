@@ -81,6 +81,9 @@ dependencies {
     // Apache Commons CSV (CSV 파싱)
     implementation("org.apache.commons:commons-csv:1.14.1")
 
+    // BOMInputStream
+    implementation("commons-io:commons-io:2.18.0")
+
     // Aho-Corasick 알고리즘 (비식재료 필터, 식재료 사전 매칭)
     implementation 'org.ahocorasick:ahocorasick:0.6.3'
 

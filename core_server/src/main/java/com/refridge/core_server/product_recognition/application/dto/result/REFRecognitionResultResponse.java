@@ -1,7 +1,7 @@
 package com.refridge.core_server.product_recognition.application.dto.result;
 
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductName;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 
 public record REFRecognitionResultResponse(
         boolean success,
@@ -18,7 +18,7 @@ public record REFRecognitionResultResponse(
 ) {
 
     public static REFRecognitionResultResponse from(REFRecognitionContext ctx) {
-        REFParsedProductName parsed = ctx.getParsedProductName();
+        REFParsedProductInformation parsed = ctx.getParsedProductName();
         var output = ctx.getOutput();
         boolean rejected = ctx.isCompleted() && output == null;
 

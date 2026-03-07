@@ -6,6 +6,7 @@ import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryIte
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
+import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemClassification;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemForUpsertDto;
 import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +53,7 @@ public class REFGroceryItemLifeCycleService {
             String groceryItemName,
             String majorCategoryName,
             String subCategoryName,
-            REFInventoryItemType type) {
+            REFGroceryItemClassification type) {
 
         return refGroceryItemRepository.findForUpsertByGroceryItemName(groceryItemName)
                 // 이미 데이터가 존재하는 경우 업데이트 없이 조회 결과를 반환
@@ -94,7 +95,7 @@ public class REFGroceryItemLifeCycleService {
     private REFGroceryItemUpsertResult createNewGroceryItemAndConvertToUpsertResult(String groceryItemName,
                                                                                     String majorCategoryName,
                                                                                     String subCategoryName,
-                                                                                    REFInventoryItemType type) {
+                                                                                    REFGroceryItemClassification type) {
         Long majorCategoryId = refGroceryItemCategoryValidateAndAdaptService
                 .findMajorCategoryIdByName(majorCategoryName);
         Long minorCategoryId = refGroceryItemCategoryValidateAndAdaptService

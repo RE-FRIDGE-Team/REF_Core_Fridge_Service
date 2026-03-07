@@ -2,7 +2,7 @@ package com.refridge.core_server.product_recognition.infra.adapter;
 
 import com.refridge.core_server.product_recognition.domain.port.REFBrandMatcher;
 import com.refridge.core_server.product_recognition.domain.port.REFProductNameParser;
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductName;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -134,9 +134,9 @@ public class REFProductNameParserAdapter implements REFProductNameParser {
     };
 
     @Override
-    public REFParsedProductName parse(String rawProductName) {
+    public REFParsedProductInformation parse(String rawProductName) {
         if (rawProductName == null || rawProductName.isBlank()) {
-            return REFParsedProductName.builder().originalText(rawProductName).build();
+            return REFParsedProductInformation.builder().originalText(rawProductName).build();
         }
 
         String working = rawProductName.trim();
@@ -162,10 +162,10 @@ public class REFProductNameParserAdapter implements REFProductNameParser {
         // 6. 최종 정제
         refined = finalCleanup(refined);
 
-        log.debug("파싱 완료 - 원본: '{}' → 정제: '{}', 브랜드: '{}', 용량: '{}', 수량: {}",
+        log.info("파싱 완료 - 원본: '{}' → 정제: '{}', 브랜드: '{}', 용량: '{}', 수량: {}",
                 rawProductName, refined, brandName, volumeInfo.volumeText, quantity);
 
-        return REFParsedProductName.builder()
+        return REFParsedProductInformation.builder()
                 .originalText(rawProductName)
                 .refinedText(refined)
                 .brandName(brandName)
