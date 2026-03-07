@@ -1,6 +1,6 @@
 package com.refridge.core_server.product_recognition.domain.port;
 
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductName;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 
 /**
  * 제품명 파싱 포트.
@@ -8,6 +8,6 @@ import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductNa
  */
 public interface REFProductNameParser {
 
-    REFParsedProductName parse(String rawProductName);
+    REFParsedProductInformation parse(String rawProductName);
 
 }

@@ -3,7 +3,7 @@ package com.refridge.core_server.product_recognition.infra.pipeline;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionHandler;
 import com.refridge.core_server.product_recognition.domain.port.REFProductNameParser;
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductName;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -22,7 +22,7 @@ public class REFProductNameParsingHandler implements REFRecognitionHandler{
 
     @Override
     public void handle(REFRecognitionContext context) {
-        REFParsedProductName parsed = productNameParser.parse(context.getRawInput());
+        REFParsedProductInformation parsed = productNameParser.parse(context.getRawInput());
         context.setParsedProductName(parsed);
 
         log.debug("제품명 파싱 완료. original='{}', refined='{}', brand='{}', qty={}, vol='{}'",

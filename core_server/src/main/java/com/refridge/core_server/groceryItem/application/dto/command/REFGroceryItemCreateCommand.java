@@ -2,6 +2,7 @@ package com.refridge.core_server.groceryItem.application.dto.command;
 
 import com.refridge.core_server.groceryItem.domain.ar.REFGroceryItem;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
+import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemClassification;
 import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import lombok.Builder;
 
@@ -32,12 +33,12 @@ public record REFGroceryItemCreateCommand(
             String groceryItemName,
             Long majorCategoryId,
             Long minorCategoryId,
-            REFInventoryItemType type
+            REFGroceryItemClassification type
     ) {
         return REFGroceryItemCreateCommand.builder()
                 .groceryItemName(groceryItemName)
                 .representativeImageUrl(null)
-                .groceryItemClassification(type.name())
+                .groceryItemClassification(type.getTypeCode())
                 .majorCategoryId(majorCategoryId)
                 .minorCategoryId(minorCategoryId)
                 .build();

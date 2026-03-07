@@ -20,7 +20,7 @@ import java.util.List;
 
 @Slf4j
 @Component
-@Order(3)
+@Order(2)
 @RequiredArgsConstructor
 public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
 
