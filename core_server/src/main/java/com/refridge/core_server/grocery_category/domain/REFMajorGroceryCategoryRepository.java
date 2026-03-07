@@ -23,4 +23,7 @@ public interface REFMajorGroceryCategoryRepository extends JpaRepository<REFMajo
     /* 정합성 체크용 - DB에 존재하는 모든 대분류 이름을 Set으로 반환 */
     @Query("SELECT m.categoryName.value FROM REFMajorGroceryCategory m")
     Set<String> findAllCategoryNames();
+
+    @Query("SELECT m.id FROM REFMajorGroceryCategory m WHERE m.categoryName.value = :categoryName")
+    Optional<Long> findCategoryIdByName(@Param("categoryName") String categoryName);
 }

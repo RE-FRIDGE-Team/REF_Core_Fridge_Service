@@ -1,6 +1,7 @@
-package com.refridge.core_server.product_recognition.application;
+package com.refridge.core_server.bootstrap;
 
 
+import com.refridge.core_server.bootstrap.strategy.REFDictionaryInitializationStrategy;
 import com.refridge.core_server.product_recognition.domain.REFRecognitionDictionaryRepository;
 import com.refridge.core_server.product_recognition.domain.ar.REFRecognitionDictionary;
 import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryName;
@@ -11,24 +12,31 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Slf4j
 @Component
+@Order(3)
 @RequiredArgsConstructor
 public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
 
     private final REFRecognitionDictionaryRepository dictionaryRepository;
     private final REFRecognitionDictionaryRedisSync redisSync;
     private final REFTrieMatcherRegistry matcherRegistry;
+    private final List<REFDictionaryInitializationStrategy> strategies; // Spring이 자동 주입
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
         for (REFRecognitionDictionaryType type : REFRecognitionDictionaryType.values()) {
+            REFDictionaryInitializationStrategy strategy = resolveStrategy(type);
+
             // 1. DB에 사전이 없으면 생성
-            initializeDictionaryIfAbsent(type);
+            initializeDictionary(type, strategy);
 
             // 2. DB → Redis 동기화
             syncToRedis(type);
@@ -46,19 +54,37 @@ public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
      * @param type 사전 타입 (EXCLUSION, GROCERY_ITEM, BRAND)
      */
     @Transactional
-    protected void initializeDictionaryIfAbsent(REFRecognitionDictionaryType type) {
-        boolean exists = dictionaryRepository.existsByDictTypeAndDictName(type, REFRecognitionDictionaryName.of(type.getKorDictName()));
+    protected void initializeDictionary(REFRecognitionDictionaryType type,
+                                        REFDictionaryInitializationStrategy strategy) {
+        boolean exists = dictionaryRepository.existsByDictTypeAndDictName(
+                type, REFRecognitionDictionaryName.of(type.getKorDictName()));
+
         if (!exists) {
-            REFRecognitionDictionary dictionary = switch (type) {
-                case EXCLUSION -> REFRecognitionDictionary.createExclusionDictionary(type.getKorDictName());
-                case GROCERY_ITEM -> REFRecognitionDictionary.createIngredientDictionary(type.getKorDictName());
-                case BRAND ->  REFRecognitionDictionary.createBrandDictionary(type.getKorDictName());
-            };
+            REFRecognitionDictionary dictionary = createEmptyDictionary(type);
+            strategy.initializeEntries(dictionary);
             dictionaryRepository.save(dictionary);
-            log.info("사전 생성 완료: {}", type.getKorDictName());
+            log.info("[사전 생성] {}", type.getKorDictName());
+        } else {
+            dictionaryRepository.findByDictType(type)
+                    .ifPresent(strategy::supplementMissingEntries);
+            log.info("[사전 보완] {}", type.getKorDictName());
         }
-        // TODO : DB 사전 새로 생성한 경우 DEFAULT 데이터가 필요함. JSON -> DB Insert 로직 추가 필요
-        // TODO : JSON -> DTO -> AR Insert 로직을 사용해 구현하기.
+    }
+
+    private REFRecognitionDictionary createEmptyDictionary(REFRecognitionDictionaryType type) {
+        return switch (type) {
+            case EXCLUSION    -> REFRecognitionDictionary.createExclusionDictionary(type.getKorDictName());
+            case GROCERY_ITEM -> REFRecognitionDictionary.createIngredientDictionary(type.getKorDictName());
+            case BRAND        -> REFRecognitionDictionary.createBrandDictionary(type.getKorDictName());
+        };
+    }
+
+    private REFDictionaryInitializationStrategy resolveStrategy(REFRecognitionDictionaryType type) {
+        return strategies.stream()
+                .filter(s -> s.supports(type))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "사전 초기화 전략 없음: " + type.name()));
     }
 
     private void syncToRedis(REFRecognitionDictionaryType type) {

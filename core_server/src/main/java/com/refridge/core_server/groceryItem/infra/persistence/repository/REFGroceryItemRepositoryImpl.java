@@ -6,6 +6,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepositoryCustom;
 import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemStatus;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemForUpsertDto;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemSummarizedDTO;
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
 import lombok.RequiredArgsConstructor;
@@ -176,4 +177,26 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
 
         return Optional.ofNullable(result);
     }
+
+    @Override
+    public Optional<REFGroceryItemForUpsertDto> findForUpsertByGroceryItemName(String groceryItemName) {
+        if (groceryItemName == null || groceryItemName.isBlank()) {
+            return Optional.empty();
+        }
+
+        REFGroceryItemForUpsertDto result = jpaQueryFactory
+                .select(Projections.constructor(
+                        REFGroceryItemForUpsertDto.class,
+                        rEFGroceryItem.id,
+                        rEFGroceryItem.groceryCategoryReference.majorCategoryId,
+                        rEFGroceryItem.groceryCategoryReference.minorCategoryId
+                ))
+                .from(rEFGroceryItem)
+                .where(
+                        rEFGroceryItem.groceryItemName.value.eq(groceryItemName),
+                        rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
+                )
+                .fetchOne();
+
+        return Optional.ofNullable(result);    }
 }

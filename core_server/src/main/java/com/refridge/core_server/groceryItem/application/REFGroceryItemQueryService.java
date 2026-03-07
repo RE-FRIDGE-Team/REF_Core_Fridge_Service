@@ -2,11 +2,9 @@ package com.refridge.core_server.groceryItem.application;
 
 import com.refridge.core_server.groceryItem.application.dto.query.REFGroceryItemInformationQuery;
 import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemDetailInfoResult;
-import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemProductNameMatchResult;
 import com.refridge.core_server.groceryItem.application.dto.result.REFGroceryItemSummaryInfoResult;
 import com.refridge.core_server.groceryItem.application.mapper.REFGroceryItemInformationMapper;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
-import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
 
 import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;

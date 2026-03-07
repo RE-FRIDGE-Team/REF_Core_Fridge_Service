@@ -2,8 +2,7 @@ package com.refridge.core_server.groceryItem.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
-import com.refridge.core_server.groceryItem.domain.dto.REFGroceryItemDetailsForFridgeStock;
-import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidatorService;
+import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
 import com.refridge.core_server.groceryItem.domain.vo.*;
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemClassificationConverter;
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemStatusConverter;
@@ -12,9 +11,7 @@ import lombok.*;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
 
 @Entity
 @SuppressWarnings("NullableProblems")
@@ -85,7 +82,7 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                                         String representativeImageUrl,
                                         String groceryItemClassification,
                                         Long majorCategoryId, Long minorCategoryId,
-                                        REFGroceryItemCategoryValidatorService categoryValidator) {
+                                        REFGroceryItemCategoryValidateAndAdaptService categoryValidator) {
 
         return Optional.of(minorCategoryId)
                 .filter(ignored -> categoryValidator.isValidCategoryIds(majorCategoryId, minorCategoryId))
@@ -103,7 +100,7 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                                                String representativeImageUrl,
                                                String groceryItemClassification,
                                                Long majorCategoryId, Long minorCategoryId,
-                                               REFGroceryItemRepository repository, REFGroceryItemCategoryValidatorService categoryValidator) {
+                                               REFGroceryItemRepository repository, REFGroceryItemCategoryValidateAndAdaptService categoryValidator) {
         return Optional.of(REFGroceryItem.create(
                         groceryItemName, representativeImageUrl,
                         groceryItemClassification, majorCategoryId, minorCategoryId, categoryValidator))
@@ -113,7 +110,7 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
 
     /* BUSINESS LOGIC : 식재료의 카테고리를 변경할 수 있다. */
     public void changeCategory(Long majorCategoryId, Long minorCategoryId,
-                               REFGroceryItemCategoryValidatorService categoryValidatorService) {
+                               REFGroceryItemCategoryValidateAndAdaptService categoryValidatorService) {
 
         if (isActive() && categoryValidatorService.isValidCategoryIds(majorCategoryId, minorCategoryId)) {
             this.groceryCategoryReference = REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId);
@@ -146,6 +143,14 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     /* BUSINESS LOGIC : 삭제된 원재료를 복구할 수 있다(삭제 -> 활성 상태 변경) */
     public void restore() {
         this.groceryItemStatus = REFGroceryItemStatus.ACTIVE;
+    }
+
+    public Long getMajorCategoryId() {
+        return this.groceryCategoryReference.getMajorCategoryId();
+    }
+
+    public Long getMinorCategoryId() {
+        return this.groceryCategoryReference.getMinorCategoryId();
     }
 
     public String getCategoryNameValue(){

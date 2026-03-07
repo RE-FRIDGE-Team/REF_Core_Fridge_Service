@@ -9,7 +9,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-public class REFGroceryItemCategoryValidatorService {
+public class REFGroceryItemCategoryValidateAndAdaptService {
 
     private final REFMajorGroceryCategoryRepository majorGroceryCategoryRepository;
 
@@ -21,5 +21,15 @@ public class REFGroceryItemCategoryValidatorService {
                 .map(Optional::get)
                 .map(minorCategory -> minorCategory.checkOwnMajorCategory(majorCategoryId))
                 .orElse(false);
+    }
+
+    public Long findMajorCategoryIdByName(String majorCategoryName){
+        return majorGroceryCategoryRepository.findCategoryIdByName(majorCategoryName)
+                .orElseThrow(() -> new IllegalArgumentException("대분류 카테고리 이름이 유효하지 않습니다: " + majorCategoryName));
+    }
+
+    public Long findMinorCategoryIdByName(String minorCategoryName){
+        return minorGroceryCategoryRepository.findCategoryIdByName(minorCategoryName)
+                .orElseThrow(() -> new IllegalArgumentException("중분류 카테고리 이름이 유효하지 않습니다: " + minorCategoryName));
     }
 }

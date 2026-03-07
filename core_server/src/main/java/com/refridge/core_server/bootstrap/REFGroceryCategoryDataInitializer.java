@@ -1,4 +1,4 @@
-package com.refridge.core_server.grocery_category.infra.init;
+package com.refridge.core_server.bootstrap;
 
 import com.refridge.core_server.grocery_category.application.REFCategoryLifeCycleService;
 import com.refridge.core_server.grocery_category.application.dto.command.REFMajorCategoryCreationCommand;
@@ -6,7 +6,7 @@ import com.refridge.core_server.grocery_category.application.dto.command.REFMino
 import com.refridge.core_server.grocery_category.domain.REFMajorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.REFMinorGroceryCategoryRepository;
 import com.refridge.core_server.grocery_category.domain.ar.REFMajorGroceryCategory;
-import com.refridge.core_server.grocery_category.infra.init.dto.REFCategoryInitRawDto;
+import com.refridge.core_server.bootstrap.dto.REFCategoryInitRawDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 애플리케이션 시작 시 GroceryCategory 초기 데이터를 삽입하는 Initializer.
