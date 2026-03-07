@@ -5,8 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
- * grocery_category_init_data.json 파싱용 DTO.
- * Application/Domain 레이어와 완전히 분리된 infra 전용 객체입니다.
+ * grocery_category_init_data.json 파싱용 DTO.<p>
+ * Application/Domain 레이어와 완전히 분리된 infra 전용 객체입니다.<p>
  *
  * <pre>
  * {@code
