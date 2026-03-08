@@ -74,6 +74,9 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         this.status = REFProductRecognitionStatus.PENDING;
         this.processingPath = REFRecognitionProcessingPath.WAITING;
         this.recognitionOutput = null;
+
+        LocalDateTime now = LocalDateTime.now();
+        this.entityTimeMetaData = new REFEntityTimeMetaData(now, now);
     }
 
     /* FACTORY METHOD */
