@@ -3,6 +3,10 @@ package com.refridge.core_server.bootstrap.strategy;
 import com.refridge.core_server.product_recognition.domain.ar.REFRecognitionDictionary;
 import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType;
 
+/***
+ * GOF 전략 패턴의 Strategy 인터페이스 역할을 하는 인터페이스입니다.
+ * REFRecognitionDictionary의 초기화 전략을 정의합니다.
+ */
 public interface REFDictionaryInitializationStrategy {
 
     /**
