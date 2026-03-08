@@ -68,6 +68,12 @@ dependencies {
     developmentOnly("me.paulschwarz:springboot4-dotenv:5.1.0")
     testImplementation("me.paulschwarz:springboot4-dotenv:5.1.0")
 
+    // AOP (Spring Boot 4.0.0-M3부터 spring-boot-starter-aop에서 이름 변경됨)
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+
+    // Prometheus (perf 프로파일에서 /actuator/prometheus 노출용)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'com.mysql:mysql-connector-j'
 

@@ -1,0 +1,31 @@
+spring:
+  config:
+    activate:
+      on-profile: perf
+
+  # perf 환경에서 SQL 로그 끄기 (성능 측정 노이즈 제거)
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    com.refridge.core_server.product_recognition.infra.aop: DEBUG
+
+
+# perf 프로파일에서 prometheus 엔드포인트 추가 노출
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, metrics, info
+  metrics:
+    distribution:
+      percentiles-histogram:
+        recognition.handler.duration: true
+        http.server.requests: true
+      percentiles:
+        recognition.handler.duration: 0.5, 0.95, 0.99
+        http.server.requests: 0.5, 0.95, 0.99

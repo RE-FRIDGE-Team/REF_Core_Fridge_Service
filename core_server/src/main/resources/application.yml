@@ -34,3 +34,12 @@ spring:
         order_inserts: true
         order_updates: true
       dialect: org.hibernate.dialect.MySQL8InnoDBDialect
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
