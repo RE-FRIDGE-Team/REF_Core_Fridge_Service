@@ -16,10 +16,12 @@ public class REFExclusionFilterHandler implements REFRecognitionHandler {
 
     @Override
     public void handle(REFRecognitionContext context) {
-        exclusionWordMatcher.findMatch(context.getRawInput())
-                .ifPresent(matched -> {
-                    log.info("비식재료 필터 매칭. input='{}', matched='{}'",
-                            context.getRawInput(), matched);
+        exclusionWordMatcher.findAllMatches(context.getRawInput())
+                .stream()
+                .peek(keyword -> log.info("비식재료 필터 매칭. input='{}', matched='{}'",
+                        context.getRawInput(), keyword))
+                .findFirst()
+                .ifPresent(ignored -> {
                     context.getRecognition().rejectAsNonFood();
                     context.reject(handlerName());
                 });

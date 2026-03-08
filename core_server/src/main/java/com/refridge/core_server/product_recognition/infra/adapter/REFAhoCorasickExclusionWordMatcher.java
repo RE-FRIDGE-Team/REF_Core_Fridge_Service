@@ -38,9 +38,12 @@ public class REFAhoCorasickExclusionWordMatcher implements REFExclusionWordMatch
             return Optional.empty();
         }
 
-        String matched = emits.iterator().next().getKeyword();
-        log.debug("비식재료 키워드 매칭: input='{}', matched='{}'", input, matched);
-        return Optional.of(matched);
+        return emits.stream()
+                .filter(emit -> isWordBoundary(input, emit))
+                .map(Emit::getKeyword)
+                .peek(matched ->
+                        log.debug("비식재료 키워드 매칭: input='{}', matched='{}'", input, matched))
+                .findFirst();
     }
 
     @Override
@@ -54,15 +57,16 @@ public class REFAhoCorasickExclusionWordMatcher implements REFExclusionWordMatch
 
         Collection<Emit> emits = currentTrie.parseText(input);
 
-        List<String> keywords = emits.stream()
-                .map(Emit::getKeyword)
-                .toList();
-
-        if (!keywords.isEmpty()) {
-            log.debug("비식재료 키워드 전체 매칭: input='{}', matched={}", input, keywords);
+        if (emits.isEmpty()) {
+            return List.of();
         }
 
-        return keywords;
+        return emits.stream()
+                .filter(emit -> isWordBoundary(input, emit))
+                .map(Emit::getKeyword)
+                .peek(matched ->
+                        log.debug("비식재료 키워드 매칭: input='{}', matched='{}'", input, matched))
+                .toList();
     }
 
     /**
@@ -85,5 +89,31 @@ public class REFAhoCorasickExclusionWordMatcher implements REFExclusionWordMatch
                 .addKeywords(entries)
                 .build();
         log.info("Exclusion Trie 재빌드 완료. 항목 수: {}", entries.size());
+    }
+
+    /**
+     * 매칭된 키워드가 독립된 단어인지 확인합니다.<p>
+     * <pre>
+     * "우드앤브릭"에서 "우드"가 매칭된 경우 → false (경계 아님)
+     * "[우드] 헤이즐넛"에서 "우드"가 매칭된 경우 → true (경계 맞음)
+     * </pre>
+     */
+    private boolean isWordBoundary(String input, Emit emit) {
+        int start = emit.getStart();
+        int end = emit.getEnd(); // Aho-Corasick의 end는 inclusive
+
+        boolean leftBoundary = (start == 0) || isBoundaryChar(input.charAt(start - 1));
+        boolean rightBoundary = (end == input.length() - 1) || isBoundaryChar(input.charAt(end + 1));
+
+        return leftBoundary && rightBoundary;
+    }
+
+    private boolean isBoundaryChar(char c) {
+        // 공백, 대괄호, 소괄호, 특수문자 등을 경계로 인정
+        return Character.isWhitespace(c)
+                || c == '['  || c == ']'
+                || c == '('  || c == ')'
+                || c == '/'  || c == ','
+                || c == '-'  || c == '_';
     }
 }

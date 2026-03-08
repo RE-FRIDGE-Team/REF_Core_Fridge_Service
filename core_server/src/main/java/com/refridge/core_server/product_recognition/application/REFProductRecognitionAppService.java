@@ -36,12 +36,12 @@ public class REFProductRecognitionAppService {
                 command.inputText(),
                 command.requesterId()
         );
-        recognitionRepository.save(recognition);
+        recognition = recognitionRepository.save(recognition);
 
         // 2. 파이프라인 조립 (순서 명시적으로 보임)
         REFRecognitionPipeline pipeline = new REFRecognitionPipeline(List.of(
-                exclusionFilterHandler,          // 1단계: 비식재료 필터
-                productNameParsingHandler,        // 2단계: 파싱 (브랜드/수량/용량 추출)
+                productNameParsingHandler,        // 1단계: 파싱 (브랜드/수량/용량 추출)
+                exclusionFilterHandler,           // 2단계: 비식재료 필터
                 groceryItemDictMatchHandler,      // 3단계: 식재료 사전 매칭
                 productIndexSearchHandler,        // 4단계: 제품 색인 검색
                 mlPredictionHandler               // 5단계: ML 예측
