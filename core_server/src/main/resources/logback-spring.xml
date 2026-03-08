@@ -1,0 +1,33 @@
+<!-- src/main/resources/logback-spring.xml -->
+<configuration>
+    <!-- 기본 콘솔 appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- perf 프로파일에서만 활성화되는 파일 appender -->
+    <springProfile name="perf">
+        <appender name="PERF_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/perf.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>logs/perf.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>7</maxHistory>
+            </rollingPolicy>
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <logger name="com.refridge.core_server.product_recognition.infra.aop"
+                level="DEBUG" additivity="false">
+            <appender-ref ref="PERF_FILE"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
