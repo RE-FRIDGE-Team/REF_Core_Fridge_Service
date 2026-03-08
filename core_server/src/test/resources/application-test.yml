@@ -1,4 +1,10 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+
   datasource:
     driver-class-name: org.h2.Driver
     # MySQL 호환 모드로 H2 실행
