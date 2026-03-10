@@ -1,6 +1,0 @@
-02:57:20.469 [PERF] handler='REFProductNameParsingHandler', elapsed=0.299ms
-02:57:20.478 [PERF] handler='REFExclusionFilterHandler', elapsed=0.575458ms
-02:57:20.479 [PERF] handler='REFGroceryItemDictMatchHandler', elapsed=0.155125ms
-02:57:20.616 [PERF] handler='REFProductIndexSearchHandler', elapsed=136.702875ms
-02:57:20.618 [PERF] handler='REFMLPredictionHandler', elapsed=0.570417ms
-02:57:20.619 [PERF] 전체 파이프라인 elapsed=164.4055ms
