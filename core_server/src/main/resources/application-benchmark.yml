@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+  data:
+    redis:
+      timeout: 500ms
+
+logging:
+  level:
+    root: WARN
+    # 벤치마크 중 모든 애플리케이션 로그 억제
+    com.refridge: WARN
+    # perf 프로파일의 AOP DEBUG 덮어쓰기
+    com.refridge.core_server.product_recognition.infra.aop: OFF
+    # 파서 INFO 로그 억제
+    com.refridge.core_server.product_recognition.infra.adapter: OFF
+    # JMH 자체 로그만 허용
+    com.refridge.benchmark: WARN
+
+management:
+  endpoints:
+    access:
+      default: none

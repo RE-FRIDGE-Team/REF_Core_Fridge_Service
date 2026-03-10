@@ -34,7 +34,7 @@ public class REFPipelinePerformanceAspect {
         } finally {
             // 예외가 나도 반드시 측정
             long elapsed = System.nanoTime() - start;
-            log.info("[PERF] handler='{}', elapsed={}ms",
+            log.debug("[PERF] handler='{}', elapsed={}ms",
                     handlerName, elapsed / 1_000_000.0);
 
             // Micrometer에도 기록 (Prometheus 연동)
@@ -56,7 +56,7 @@ public class REFPipelinePerformanceAspect {
             return pjp.proceed();
         } finally {
             long elapsed = System.nanoTime() - start;
-            log.info("[PERF] 전체 파이프라인 elapsed={}ms", elapsed / 1_000_000.0);
+            log.debug("[PERF] 전체 파이프라인 elapsed={}ms", elapsed / 1_000_000.0);
 
             Timer.builder("recognition.pipeline.duration")
                     .register(meterRegistry)

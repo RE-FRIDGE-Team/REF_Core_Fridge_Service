@@ -4,6 +4,7 @@ plugins {
     id 'idea'
     id 'org.springframework.boot' version '4.0.2'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'me.champeau.jmh' version '0.7.2'   // JMH 전용 플러그인 — 별도 sourceSet 자동 생성
 }
 
 group = 'com.refridge'
@@ -112,6 +113,13 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // JMH (jmh sourceSet에만 적용됨 — 프로덕션 빌드 영향 없음)
+    jmh 'org.openjdk.jmh:jmh-core:1.37'
+    jmh 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+
+    // 벤치마크에서 Spring Context 부트스트랩용
+    jmh 'org.springframework.boot:spring-boot-starter-test'
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -123,4 +131,34 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// ── JMH 플러그인 설정 ──
+jmh {
+    // 이 패턴에 매칭되는 클래스만 실행
+    // includes            = ['com.refridge.benchmark.*']
+    includes            = ['com.refridge.benchmark.REFProductRecognitionMultiThreadBenchmark.*']
+
+    warmupIterations    = 3          // 워밍업 3회 (JIT 안정화)
+    iterations          = 5          // 실측 5회
+    fork                = 1          // 프로세스 포크 수 (메모리 격리)
+    threads             = 1          // 기본 단일 스레드 (벤치마크 클래스에서 오버라이드 가능)
+    warmup              = '3s'
+    timeOnIteration     = '3s'
+
+    benchmarkMode       = ['avgt']   // AverageTime — ms/op
+    timeUnit            = 'ms'
+
+    // 결과 파일 (Grafana 연동 가능)
+    resultFormat        = 'JSON'
+    resultsFile         = project.file("${layout.buildDirectory.get()}/reports/jmh/results.json")
+
+    // 프로파일러 (선택 — AsyncProfiler 설치 시)
+    // profilers = ['async:libPath=/path/to/libasyncProfiler.so;output=flamegraph']
+
+    jvmArgsAppend       = [
+            '-Dspring.profiles.active=perf,benchmark',
+            '-Xms512m', '-Xmx1g',
+            '--add-opens=java.base/java.lang=ALL-UNNAMED'   // Java 21 reflection
+    ]
 }
