@@ -3,6 +3,7 @@ package com.refridge.benchmark;
 import com.refridge.core_server.product_recognition.application.dto.command.REFRecognitionRequestCommand;
 import com.refridge.core_server.product_recognition.domain.ar.REFProductRecognition;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import tools.jackson.databind.JsonNode;
@@ -124,8 +125,7 @@ public class REFProductRecognitionMultiThreadBenchmark {
     @Benchmark
     public void handler2_exclusionFilter_concurrent(Blackhole bh) throws Exception {
         runConcurrent(threadCount, bh, () -> {
-            REFRecognitionContext ctx = makeContext(nextInput());
-            config.productNameParsingHandler.handle(ctx);
+            REFRecognitionContext ctx = makeContextWithParsing(nextInput());  // parser.parse() 직접 호출
             config.exclusionFilterHandler.handle(ctx);
             return ctx;
         });
@@ -138,8 +138,7 @@ public class REFProductRecognitionMultiThreadBenchmark {
     @Benchmark
     public void handler3_dictMatch_concurrent(Blackhole bh) throws Exception {
         runConcurrent(threadCount, bh, () -> {
-            REFRecognitionContext ctx = makeContext(nextInput());
-            config.productNameParsingHandler.handle(ctx);
+            REFRecognitionContext ctx = makeContextWithParsing(nextInput());
             config.groceryItemDictMatchHandler.handle(ctx);
             return ctx;
         });
@@ -152,8 +151,7 @@ public class REFProductRecognitionMultiThreadBenchmark {
     @Benchmark
     public void handler4_productIndexSearch_concurrent(Blackhole bh) throws Exception {
         runConcurrent(threadCount, bh, () -> {
-            REFRecognitionContext ctx = makeContext(nextInput());
-            config.productNameParsingHandler.handle(ctx);
+            REFRecognitionContext ctx = makeContextWithParsing(nextInput());
             config.productIndexSearchHandler.handle(ctx);
             return ctx;
         });
@@ -200,6 +198,18 @@ public class REFProductRecognitionMultiThreadBenchmark {
         return new REFRecognitionContext(input, recognition);
     }
 
+    private REFRecognitionContext makeContextWithParsing(String input) {
+        REFProductRecognition recognition = REFProductRecognition.create(
+                input, UUID.randomUUID().toString()
+        );
+        REFRecognitionContext ctx = new REFRecognitionContext(input, recognition);
+
+        // parser.parse() 직접 호출 → AOP 미적용, calls.total 카운터 오염 없음
+        REFParsedProductInformation parsed = config.parser.parse(input);
+        ctx.setParsedProductName(parsed);
+        return ctx;
+    }
+
     /**
      * benchmark_fixtures.json 로드 후 시드 고정 셔플.
      * 시드가 동일하면 매 JMH 실행마다 동일한 순서 보장.
@@ -230,45 +240,3 @@ public class REFProductRecognitionMultiThreadBenchmark {
         Object execute() throws Exception;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
