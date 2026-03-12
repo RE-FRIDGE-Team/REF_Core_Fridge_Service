@@ -1,0 +1,28 @@
+01:21:33.294 [PERF] handler='ProductNameParsing', elapsed=0.552333ms
+01:21:33.299 [PERF] handler='ExclusionFilter', elapsed=1.220416ms
+01:21:33.300 [PERF] handler='GroceryItemDictMatch', elapsed=0.270167ms
+01:21:33.428 [PERF] handler='ProductIndexSearch', elapsed=127.860875ms
+01:21:33.429 [PERF] handler='MLPrediction', elapsed=0.173458ms
+01:21:33.430 [PERF] 전체 파이프라인 elapsed=174.34575ms
+01:23:39.988 [PERF] handler='ProductNameParsing', elapsed=1.667ms
+01:23:39.989 [PERF] handler='ExclusionFilter', elapsed=0.316542ms
+01:23:39.990 [PERF] handler='GroceryItemDictMatch', elapsed=0.094042ms
+01:23:40.003 [PERF] handler='ProductIndexSearch', elapsed=12.707584ms
+01:23:40.004 [PERF] handler='MLPrediction', elapsed=0.062875ms
+01:23:40.004 [PERF] 전체 파이프라인 elapsed=35.408167ms
+01:23:42.700 [PERF] handler='ProductNameParsing', elapsed=0.221125ms
+01:23:42.701 [PERF] handler='ExclusionFilter', elapsed=0.079042ms
+01:23:42.701 [PERF] handler='GroceryItemDictMatch', elapsed=0.0325ms
+01:23:42.709 [PERF] handler='ProductIndexSearch', elapsed=7.444708ms
+01:23:42.710 [PERF] handler='MLPrediction', elapsed=0.076458ms
+01:23:42.710 [PERF] 전체 파이프라인 elapsed=15.880625ms
+01:26:22.127 [PERF] handler='ProductNameParsing', elapsed=0.276875ms
+01:26:22.128 [PERF] handler='ExclusionFilter', elapsed=0.274166ms
+01:26:22.129 [PERF] handler='GroceryItemDictMatch', elapsed=0.037708ms
+01:26:22.145 [PERF] handler='ProductIndexSearch', elapsed=14.938084ms
+01:26:22.146 [PERF] handler='MLPrediction', elapsed=0.07575ms
+01:26:22.146 [PERF] 전체 파이프라인 elapsed=29.072542ms
+01:26:45.254 [PERF] handler='ProductNameParsing', elapsed=0.361958ms
+01:26:45.256 [PERF] handler='ExclusionFilter', elapsed=0.114667ms
+01:26:45.282 [PERF] handler='GroceryItemDictMatch', elapsed=25.483208ms
+01:26:45.282 [PERF] 전체 파이프라인 elapsed=38.18ms
