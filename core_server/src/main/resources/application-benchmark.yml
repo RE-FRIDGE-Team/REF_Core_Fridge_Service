@@ -22,5 +22,6 @@ logging:
 
 management:
   endpoints:
-    access:
-      default: none
+    web:
+      exposure:
+        include: health, prometheus   # perf 설정 유지

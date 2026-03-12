@@ -1,6 +1,10 @@
-name : refridge
+name: refridge
 
 services:
+
+  # ────────────────────────────────────────
+  # 기존 인프라
+  # ────────────────────────────────────────
   redis:
     container_name: refridge-redis-cache
     image: 'redis:latest'
@@ -15,9 +19,53 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
     ports:
       - "3306:3306"
-    # RDB 의 볼륨 마운트 설정
     volumes:
       - mysql_data:/var/lib/mysql
 
+  # ────────────────────────────────────────
+  # Prometheus — 메트릭 수집기
+  # Spring Boot /actuator/prometheus 를 5초마다 scrape
+  # ────────────────────────────────────────
+  prometheus:
+    container_name: refridge-prometheus
+    image: prom/prometheus:latest
+    ports:
+      - '9090:9090'
+    volumes:
+      # prometheus.yml 을 컨테이너 안으로 마운트
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'   # POST /-/reload 로 설정 핫리로드 가능
+    extra_hosts:
+      # 컨테이너 → 호스트(Mac) 의 Spring Boot 접근용
+      # Mac: host.docker.internal 이 호스트 IP 를 가리킴
+      - "host.docker.internal:host-gateway"
+
+  # ────────────────────────────────────────
+  # Grafana — 시각화 대시보드
+  # 초기 계정: admin / admin (첫 로그인 시 변경 요청)
+  # ────────────────────────────────────────
+  grafana:
+    container_name: refridge-grafana
+    image: grafana/grafana:latest
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # 프로비저닝: Grafana 시작 시 Prometheus 데이터 소스 자동 등록
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+
 volumes:
   mysql_data:
+  prometheus_data:
+  grafana_data:

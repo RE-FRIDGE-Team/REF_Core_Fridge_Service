@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 5s       # 5초마다 메트릭 수집
+  evaluation_interval: 5s   # 5초마다 alert rule 평가
+
+scrape_configs:
+
+  # Spring Boot Actuator /actuator/prometheus 엔드포인트 scrape
+  - job_name: 'refridge-core-server'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          # host.docker.internal = 컨테이너에서 본 Mac 호스트 IP
+          # Spring Boot 기본 포트 8080
+          - 'host.docker.internal:8080'
+    # 레이블 추가 — Grafana 쿼리에서 app="refridge" 로 필터 가능
+    relabel_configs:
+      - target_label: app
+        replacement: refridge

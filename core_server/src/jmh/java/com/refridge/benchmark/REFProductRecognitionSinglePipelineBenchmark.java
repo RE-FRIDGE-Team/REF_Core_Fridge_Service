@@ -65,10 +65,14 @@ public class REFProductRecognitionSinglePipelineBenchmark {
     @Setup(Level.Invocation)
     public void prepareContext() {
         REFProductRecognition recognition = REFProductRecognition.create(
-                INPUT_GENERAL,
-                java.util.UUID.randomUUID().toString()
+                INPUT_GENERAL, UUID.randomUUID().toString()
         );
         freshContext = new REFRecognitionContext(INPUT_GENERAL, recognition);
+
+        // 파싱 결과를 context에 직접 세팅 (AOP 카운팅 없이)
+        // handler2~4 격리 측정 시 사전 준비용
+        var parsed = config.parser.parse(INPUT_GENERAL);
+        freshContext.setParsedProductName(parsed);
     }
 
     // ────────────────────────────────────────────────
@@ -102,7 +106,6 @@ public class REFProductRecognitionSinglePipelineBenchmark {
     /** 2단계: 비식재료 필터 (Aho-Corasick 매칭 → reject 가능) */
     @Benchmark
     public void handler2_exclusionFilter(Blackhole bh) {
-        config.productNameParsingHandler.handle(freshContext); // 파싱 선행 필요
         config.exclusionFilterHandler.handle(freshContext);
         bh.consume(freshContext);
     }
@@ -110,7 +113,6 @@ public class REFProductRecognitionSinglePipelineBenchmark {
     /** 3단계: 식재료 사전 매칭 (Redis 조회 포함) */
     @Benchmark
     public void handler3_dictMatch(Blackhole bh) {
-        config.productNameParsingHandler.handle(freshContext);
         config.groceryItemDictMatchHandler.handle(freshContext);
         bh.consume(freshContext);
     }
@@ -118,7 +120,6 @@ public class REFProductRecognitionSinglePipelineBenchmark {
     /** 4단계: 제품 색인 검색 (DB/Redis 조회) */
     @Benchmark
     public void handler4_productIndexSearch(Blackhole bh) {
-        config.productNameParsingHandler.handle(freshContext);
         config.productIndexSearchHandler.handle(freshContext);
         bh.consume(freshContext);
     }

@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # grafana 컨테이너 → prometheus 컨테이너 (같은 docker network)
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
