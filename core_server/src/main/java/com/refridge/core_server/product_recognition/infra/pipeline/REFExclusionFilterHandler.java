@@ -16,7 +16,7 @@ public class REFExclusionFilterHandler implements REFRecognitionHandler {
 
     @Override
     public void handle(REFRecognitionContext context) {
-        exclusionWordMatcher.findAllMatches(context.getRawInput())
+        exclusionWordMatcher.findAllMatches(context.getEffectiveInput())
                 .stream()
                 .peek(keyword -> log.info("비식재료 필터 매칭. input='{}', matched='{}'",
                         context.getRawInput(), keyword))

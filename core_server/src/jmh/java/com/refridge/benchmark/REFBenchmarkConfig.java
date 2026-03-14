@@ -4,6 +4,7 @@ package com.refridge.benchmark;
 import com.refridge.core_server.CoreServerApplication;
 import com.refridge.core_server.product_recognition.application.REFProductRecognitionAppService;
 import com.refridge.core_server.product_recognition.domain.port.REFProductNameParser;
+import com.refridge.core_server.product_recognition.infra.adapter.REFAhoCorasickExclusionWordMatcher;
 import com.refridge.core_server.product_recognition.infra.pipeline.*;
 import org.openjdk.jmh.annotations.*;
 import org.springframework.boot.SpringApplication;
@@ -31,6 +32,9 @@ public class REFBenchmarkConfig {
     public REFProductIndexSearchHandler productIndexSearchHandler;
     public REFMLPredictionHandler mlPredictionHandler;
 
+    public REFAhoCorasickExclusionWordMatcher exclusionWordMatcher;
+
+
     @Setup(Level.Trial)
     public void bootSpring() {
         System.setProperty("spring.profiles.active", "perf,benchmark");
@@ -44,6 +48,7 @@ public class REFBenchmarkConfig {
         groceryItemDictMatchHandler = context.getBean(REFGroceryItemDictMatchHandler.class);
         productIndexSearchHandler   = context.getBean(REFProductIndexSearchHandler.class);
         mlPredictionHandler         = context.getBean(REFMLPredictionHandler.class);
+        exclusionWordMatcher        = context.getBean(REFAhoCorasickExclusionWordMatcher.class);
     }
 
     @TearDown(Level.Trial)

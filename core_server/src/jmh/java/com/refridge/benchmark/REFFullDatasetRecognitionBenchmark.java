@@ -78,12 +78,47 @@ public class REFFullDatasetRecognitionBenchmark {
     //    (AOP rejected.total 카운터가 찍힘)
     // ─────────────────────────────────────────────────────────
     @Benchmark
-    public void fullDataset_exclusionFilter(Blackhole bh) {
+    public void fullDataset_exclusionFilter(Blackhole bh) throws Exception {
+        // keyword → 걸린 항목 목록
+        Map<String, List<String>> rejectedByKeyword = new TreeMap<>();
+
         for (String input : fixtures) {
             REFRecognitionContext ctx = makeContextWithParsing(input);
-            config.exclusionFilterHandler.handle(ctx);
+
+            // parser로 정제된 텍스트 사용 (ExclusionFilter가 rawInput을 쓰므로 동일하게)
+            List<String> matched = config.exclusionWordMatcher.findAllMatches(input);
+
+            if (!matched.isEmpty()) {
+                String refinedInput = ctx.getEffectiveInput(); // 파싱 후 정제된 텍스트
+                for (String keyword : matched) {
+                    rejectedByKeyword
+                            .computeIfAbsent(keyword, k -> new ArrayList<>())
+                            .add(String.format("[원본] %s | [정제] %s", input, refinedInput));
+                }
+            }
             bh.consume(ctx);
         }
+
+        // 키워드별 오탐 리포트 출력
+        StringBuilder report = new StringBuilder();
+        report.append("=== ExclusionFilter 키워드별 반려 리포트 ===\n\n");
+
+        rejectedByKeyword.entrySet().stream()
+                .sorted((a, b) -> b.getValue().size() - a.getValue().size()) // 건수 내림차순
+                .forEach(entry -> {
+                    report.append(String.format("[키워드: \"%s\"] %d건\n",
+                            entry.getKey(), entry.getValue().size()));
+                    entry.getValue().stream().limit(5).forEach(item ->
+                            report.append("  → ").append(item).append("\n")
+                    );
+                    report.append("\n");
+                });
+
+        java.nio.file.Files.write(
+                java.nio.file.Path.of("build/reports/jmh/rejection_by_keyword.txt"),
+                report.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        System.out.println(report);
     }
 
     // ─────────────────────────────────────────────────────────

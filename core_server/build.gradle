@@ -133,32 +133,78 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// ── JMH 플러그인 설정 ──
+// ── 벤치마크 프리셋 정의 ──────────────────────────────────────────
+def benchmarkPresets = [
+
+        // ./gradlew jmh -Pbench=single
+        single: [
+                includes      : ['com.refridge.benchmark.REFProductRecognitionSinglePipelineBenchmark.*'],
+                warmup        : 3,
+                iterations    : 5,
+                threads       : 1,
+                mode          : ['avgt'],
+                timeUnit      : 'ms',
+        ],
+
+        // ./gradlew jmh -Pbench=multi
+        multi: [
+                includes      : ['com.refridge.benchmark.REFProductRecognitionMultiThreadBenchmark.*'],
+                warmup        : 3,
+                iterations    : 5,
+                threads       : 1,      // runConcurrent 내부에서 threadCount @Param으로 제어
+                mode          : ['thrpt'],
+                timeUnit      : 'ms',
+        ],
+
+        // ./gradlew jmh -Pbench=dataset
+        dataset: [
+                includes      : ['com.refridge.benchmark.REFFullDatasetRecognitionBenchmark.fullDataset_exclusionFilter'],
+                warmup        : 0,
+                iterations    : 1,
+                threads       : 1,
+                mode          : ['ss'],  // SingleShotTime
+                timeUnit      : 'ms',
+        ],
+
+        // ./gradlew jmh -Pbench=all
+        all: [
+                includes      : ['com.refridge.benchmark.*'],
+                warmup        : 3,
+                iterations    : 5,
+                threads       : 1,
+                mode          : ['avgt'],
+                timeUnit      : 'ms',
+        ],
+]
+
+// ── 선택된 프리셋 로드 (기본값: single) ──
+def selectedKey = project.findProperty('bench') ?: 'dataset'
+def preset = benchmarkPresets[selectedKey]
+
+if (preset == null) {
+    throw new GradleException(
+            "Unknown bench preset: '${selectedKey}'\n" +
+                    "Available: ${benchmarkPresets.keySet().join(', ')}"
+    )
+}
+
+logger.lifecycle("▶ JMH preset: [${selectedKey}] → ${preset.includes}")
+
 jmh {
-    // 이 패턴에 매칭되는 클래스만 실행
-    // includes            = ['com.refridge.benchmark.*']
-    includes            = ['com.refridge.benchmark.REFProductRecognitionMultiThreadBenchmark.*']
-
-    warmupIterations    = 3          // 워밍업 3회 (JIT 안정화)
-    iterations          = 5          // 실측 5회
-    fork                = 1          // 프로세스 포크 수 (메모리 격리)
-    threads             = 1          // 기본 단일 스레드 (벤치마크 클래스에서 오버라이드 가능)
-    warmup              = '3s'
-    timeOnIteration     = '3s'
-
-    benchmarkMode       = ['avgt']   // AverageTime — ms/op
-    timeUnit            = 'ms'
-
-    // 결과 파일 (Grafana 연동 가능)
+    includes            = preset.includes
+    warmupIterations    = preset.warmup
+    iterations          = preset.iterations
+    fork                = 1
+    threads             = preset.threads
+    warmup              = "${preset.warmup}s"
+    timeOnIteration     = '5s'
+    benchmarkMode       = preset.mode
+    timeUnit            = preset.timeUnit
     resultFormat        = 'JSON'
-    resultsFile         = project.file("${layout.buildDirectory.get()}/reports/jmh/results.json")
-
-    // 프로파일러 (선택 — AsyncProfiler 설치 시)
-    // profilers = ['async:libPath=/path/to/libasyncProfiler.so;output=flamegraph']
-
+    resultsFile         = project.file("${layout.buildDirectory.get()}/reports/jmh/results_${selectedKey}.json")
     jvmArgsAppend       = [
             '-Dspring.profiles.active=perf,benchmark',
             '-Xms512m', '-Xmx1g',
-            '--add-opens=java.base/java.lang=ALL-UNNAMED'   // Java 21 reflection
+            '--add-opens=java.base/java.lang=ALL-UNNAMED'
     ]
 }
