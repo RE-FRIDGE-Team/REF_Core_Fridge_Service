@@ -13,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -70,6 +71,23 @@ public class REFJsonDictionaryInitializationStrategy implements REFDictionaryIni
 
         dictionary.addEntries(missing, REFEntrySource.ADMIN);
         log.info("[JSON 보완] {} 사전: {}개 항목 추가", dictionary.getDictType(), missing.size());
+    }
+
+    @Override
+    public void removeDeletedEntries(REFRecognitionDictionary dictionary) {
+        Set<String> jsonEntries = new HashSet<>(loadFromJson(dictionary.getDictType())); // exclusion_dict.json 로드
+
+        // DB에는 있지만 JSON에는 없는 항목 → 삭제 대상
+        Set<String> currentEntries = dictionary.getAllEntryTexts();
+        Set<String> toRemove = currentEntries.stream()
+                .filter(entry -> !jsonEntries.contains(entry))
+                .collect(Collectors.toSet());
+
+        if (!toRemove.isEmpty()) {
+            toRemove.forEach(dictionary::removeEntry); // AR에 removeEntry 추가 필요
+            log.info("[사전 정제] {} 항목 제거: {}개",
+                    dictionary.getDictType().getKorDictName(), toRemove.size());
+        }
     }
 
     private List<String> loadFromJson(REFRecognitionDictionaryType type) {
