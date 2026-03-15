@@ -1,6 +1,5 @@
 package com.refridge.benchmark;
 
-import com.refridge.core_server.product_recognition.application.dto.command.REFRecognitionRequestCommand;
 import com.refridge.core_server.product_recognition.domain.ar.REFProductRecognition;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
@@ -8,6 +7,13 @@ import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemItemTypeDto;
+import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
+import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.stream.Collectors;
 
 import java.io.InputStream;
 import java.util.*;
@@ -40,14 +46,21 @@ import java.util.concurrent.TimeUnit;
  */
 @BenchmarkMode(Mode.SingleShotTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Warmup(iterations = 0)         // 분포 측정 목적 — warmup 없이 cold-start 그대로 측정
-@Measurement(iterations = 1)   // 딱 1회 실행 (23,572건 전체가 하나의 iteration)
+@Warmup(iterations = 0)
+@Measurement(iterations = 1)
 @Fork(1)
 @State(Scope.Benchmark)
 public class REFFullDatasetRecognitionBenchmark {
 
-    private static final long   FIXTURE_SEED = 42L;
-    private static final String FIXTURE_PATH = "/benchmark_fixtures.json";
+    private static final long   FIXTURE_SEED   = 42L;
+    private static final String FIXTURE_PATH   = "/benchmark_fixtures.json";
+    private static final String CSV_SEPARATOR  = " > ";
+
+    // CSV 대상: DictMatch / ProductIndexSearch 에서 완료된 경우만
+    private static final Set<String> CSV_TARGET_HANDLERS = Set.of(
+            "GroceryItemDictMatch",
+            "ProductIndexSearch"
+    );
 
     private List<String>       fixtures;
     private REFBenchmarkConfig config;
@@ -58,38 +71,60 @@ public class REFFullDatasetRecognitionBenchmark {
         this.fixtures = loadFixtures();
     }
 
-    // ─────────────────────────────────────────────────────────
-    // 1. 전체 파이프라인 — 23,572건을 순서대로 한 번씩 실행
-    //    Grafana에서 핸들러별 처리 분포 확인용 메인 벤치마크
-    // ─────────────────────────────────────────────────────────
     @Benchmark
-    public void fullDataset_pipeline(Blackhole bh) {
+    public void fullDataset_pipeline(Blackhole bh) throws Exception {
+        List<PipelineMatchResult> matchResults = new ArrayList<>();
+        List<String> noMatchResults = new ArrayList<>();  // ← 추가
+
         for (String input : fixtures) {
-            REFRecognitionRequestCommand cmd = new REFRecognitionRequestCommand(
+            REFParsedProductInformation parsed = config.parser.parse(input);
+
+            REFProductRecognition recognition = REFProductRecognition.create(
                     input, UUID.randomUUID().toString()
             );
-            bh.consume(config.appService.recognize(cmd));
+            REFRecognitionContext ctx = new REFRecognitionContext(input, recognition);
+            ctx.setParsedProductName(parsed);
+
+            config.exclusionFilterHandler.handle(ctx);
+            if (!ctx.isCompleted()) config.groceryItemDictMatchHandler.handle(ctx);
+            if (!ctx.isCompleted()) config.productIndexSearchHandler.handle(ctx);
+            if (!ctx.isCompleted()) config.mlPredictionHandler.handle(ctx);
+
+            bh.consume(ctx);
+
+            if (ctx.isCompleted() && ctx.getOutput() != null
+                    && CSV_TARGET_HANDLERS.contains(ctx.getCompletedBy())) {
+                String brand = parsed.getBrandName().orElse(null);
+                matchResults.add(new PipelineMatchResult(input, ctx.getOutput(), brand, ctx.getCompletedBy()));
+
+            } else if (!ctx.isCompleted() || ctx.getOutput() == null) {  // ← 추가
+                // ExclusionFilter 반려 제외, 순수 노매치만 수집
+                if (ctx.getOutput() == null && !isRejected(ctx)) {
+                    noMatchResults.add(input);
+                }
+            }
         }
+
+        writeCsv(matchResults);
+        writeNoMatchCsv(noMatchResults);  // ← 추가
+        System.out.printf("[CSV] 전체: %d건, 매칭 성공: %d건, 노매치: %d건%n",
+                fixtures.size(), matchResults.size(), noMatchResults.size());
     }
 
+
     // ─────────────────────────────────────────────────────────
-    // 2. ExclusionFilter 단독 — 비식재료 비율 측정
-    //    전체 23,572건 중 몇 건이 비식재료인지 확인
-    //    (AOP rejected.total 카운터가 찍힘)
+    // 2. ExclusionFilter 오탐 리포트
     // ─────────────────────────────────────────────────────────
     @Benchmark
     public void fullDataset_exclusionFilter(Blackhole bh) throws Exception {
-        // keyword → 걸린 항목 목록
         Map<String, List<String>> rejectedByKeyword = new TreeMap<>();
 
         for (String input : fixtures) {
             REFRecognitionContext ctx = makeContextWithParsing(input);
-
-            // parser로 정제된 텍스트 사용 (ExclusionFilter가 rawInput을 쓰므로 동일하게)
             List<String> matched = config.exclusionWordMatcher.findAllMatches(input);
 
             if (!matched.isEmpty()) {
-                String refinedInput = ctx.getEffectiveInput(); // 파싱 후 정제된 텍스트
+                String refinedInput = ctx.getEffectiveInput();
                 for (String keyword : matched) {
                     rejectedByKeyword
                             .computeIfAbsent(keyword, k -> new ArrayList<>())
@@ -99,31 +134,24 @@ public class REFFullDatasetRecognitionBenchmark {
             bh.consume(ctx);
         }
 
-        // 키워드별 오탐 리포트 출력
-        StringBuilder report = new StringBuilder();
-        report.append("=== ExclusionFilter 키워드별 반려 리포트 ===\n\n");
-
+        StringBuilder report = new StringBuilder("=== ExclusionFilter 키워드별 반려 리포트 ===\n\n");
         rejectedByKeyword.entrySet().stream()
-                .sorted((a, b) -> b.getValue().size() - a.getValue().size()) // 건수 내림차순
+                .sorted((a, b) -> b.getValue().size() - a.getValue().size())
                 .forEach(entry -> {
                     report.append(String.format("[키워드: \"%s\"] %d건\n",
                             entry.getKey(), entry.getValue().size()));
-                    entry.getValue().stream().limit(5).forEach(item ->
-                            report.append("  → ").append(item).append("\n")
-                    );
+                    entry.getValue().stream().limit(5)
+                            .forEach(item -> report.append("  → ").append(item).append("\n"));
                     report.append("\n");
                 });
 
-        java.nio.file.Files.write(
-                java.nio.file.Path.of("build/reports/jmh/rejection_by_keyword.txt"),
-                report.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)
-        );
+        Path outputPath = Path.of("build/reports/jmh/rejection_by_keyword.txt");
+        Files.write(outputPath, report.toString().getBytes(StandardCharsets.UTF_8));
         System.out.println(report);
     }
 
     // ─────────────────────────────────────────────────────────
-    // 3. DictMatch 단독 — 사전 매칭 성공률 측정
-    //    ExclusionFilter 없이 순수하게 사전 매칭 가능한 비율 확인
+    // 3. DictMatch 단독 성공률 측정
     // ─────────────────────────────────────────────────────────
     @Benchmark
     public void fullDataset_dictMatch(Blackhole bh) {
@@ -135,7 +163,7 @@ public class REFFullDatasetRecognitionBenchmark {
     }
 
     // ─────────────────────────────────────────────────────────
-    // 4. ProductIndexSearch 단독 — 색인 검색 성공률 측정
+    // 4. ProductIndexSearch 단독 성공률 측정
     // ─────────────────────────────────────────────────────────
     @Benchmark
     public void fullDataset_productIndexSearch(Blackhole bh) {
@@ -147,28 +175,94 @@ public class REFFullDatasetRecognitionBenchmark {
     }
 
     // ─────────────────────────────────────────────────────────
-    // Helpers
+    // CSV 출력
     // ─────────────────────────────────────────────────────────
 
     /**
-     * parser.parse()는 AOP 포인트컷 대상이 아니므로 카운터 오염 없이 파싱만 수행.
-     * 핸들러 격리 벤치마크(2~4)에서 사전 파싱 준비용.
+     * 수집된 결과로 CSV 파일 생성.
+     *
+     * <p>itemType 은 groceryItemId 기준 배치 조회 (N+1 방지).
+     * 쿼리 1회로 전체 itemType 맵 구성 후 루프에서 조회.
+     *
+     * <p>출력 경로: build/reports/jmh/recognition_results.csv
+     * <p>CSV 컬럼: 실제품명, 대분류, 중분류, 카테고리태그, 식재료명, 브랜드
      */
+    private void writeCsv(List<PipelineMatchResult> results) throws Exception {
+        if (results.isEmpty()) {
+            System.out.println("[CSV] 매칭된 항목 없음");
+            return;
+        }
+
+        // ── groceryItemId 목록 수집 → 배치 조회로 itemType 획득 ──
+        List<Long> groceryItemIds = results.stream()
+                .map(r -> r.output().getGroceryItemId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Map<groceryItemId, REFInventoryItemType> — 배치 쿼리 1회
+        Map<Long, REFInventoryItemType> itemTypeMap =
+                config.groceryItemRepository.findItemTypesByIds(groceryItemIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                REFGroceryItemItemTypeDto::id,
+                                REFGroceryItemItemTypeDto::itemType
+                        ));
+
+        // ── CSV 작성 ──
+        StringBuilder csv = new StringBuilder();
+        csv.append("실제품명,대분류,중분류,카테고리태그,식재료명,브랜드\n");
+
+        for (PipelineMatchResult result : results) {
+            REFProductRecognitionOutput output = result.output();
+
+            // "대분류 > 중분류" 분리
+            String[] parts = output.getCategoryPath().split(CSV_SEPARATOR, 2);
+            String majorCategory = parts.length > 0 ? parts[0].trim() : "";
+            String minorCategory = parts.length > 1 ? parts[1].trim() : "";
+
+            // itemType (배치 조회 결과)
+            REFInventoryItemType itemType = itemTypeMap.get(output.getGroceryItemId());
+            String categoryTag = itemType != null ? itemType.name() : "";
+
+            csv.append(String.format("%s,%s,%s,%s,%s,%s\n",
+                    escapeCsv(result.rawInput()),
+                    escapeCsv(majorCategory),
+                    escapeCsv(minorCategory),
+                    escapeCsv(categoryTag),
+                    escapeCsv(output.getGroceryItemName()),
+                    escapeCsv(result.brand() != null ? result.brand() : "")
+            ));
+        }
+
+        Path outputPath = Path.of("build/reports/jmh/recognition_results.csv");
+        Files.createDirectories(outputPath.getParent());
+        Files.write(outputPath, csv.toString().getBytes(StandardCharsets.UTF_8));
+        System.out.printf("[CSV] 저장 완료: %s (%d건)%n", outputPath, results.size());
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────
+
     private REFRecognitionContext makeContextWithParsing(String input) {
         REFProductRecognition recognition = REFProductRecognition.create(
                 input, UUID.randomUUID().toString()
         );
         REFRecognitionContext ctx = new REFRecognitionContext(input, recognition);
-
-        // parser.parse() 직접 호출 → AOP 미적용, calls.total 카운터 오염 없음
         REFParsedProductInformation parsed = config.parser.parse(input);
         ctx.setParsedProductName(parsed);
         return ctx;
     }
 
-    /**
-     * 시드 고정 셔플로 로드. 동일 시드 → 매 실행마다 동일한 입력 순서.
-     */
+    /** CSV 필드 이스케이프: 쉼표/개행/쌍따옴표 포함 시 쌍따옴표로 감쌈 */
+    private String escapeCsv(String value) {
+        if (value == null || value.isEmpty()) return "";
+        if (value.contains(",") || value.contains("\n") || value.contains("\"")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
     private List<String> loadFixtures() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         InputStream is = getClass().getResourceAsStream(FIXTURE_PATH);
@@ -178,7 +272,6 @@ public class REFFullDatasetRecognitionBenchmark {
                             "Place it at src/jmh/resources/benchmark_fixtures.json"
             );
         }
-
         JsonNode root  = mapper.readTree(is);
         JsonNode items = root.get("items");
 
@@ -186,8 +279,46 @@ public class REFFullDatasetRecognitionBenchmark {
         for (JsonNode item : items) {
             list.add(item.asString());
         }
-
         Collections.shuffle(list, new Random(FIXTURE_SEED));
         return Collections.unmodifiableList(list);
     }
+
+    /** ExclusionFilter 반려 여부 확인 */
+    private boolean isRejected(REFRecognitionContext ctx) {
+        return ctx.isCompleted()
+                && ctx.getOutput() == null
+                && "ExclusionFilter".equals(ctx.getCompletedBy());
+    }
+
+    /**
+     * 노매치 항목 CSV 출력.
+     * 제품명만 채우고 나머지 5개 컬럼은 전부 빈 값.
+     * 출력 경로: build/reports/jmh/no_matched_recognition_result.csv
+     */
+    private void writeNoMatchCsv(List<String> noMatchInputs) throws Exception {
+        if (noMatchInputs.isEmpty()) {
+            System.out.println("[CSV] 노매치 항목 없음");
+            return;
+        }
+
+        StringBuilder csv = new StringBuilder();
+        csv.append("실제품명,대분류,중분류,카테고리태그,식재료명,브랜드\n");
+
+        for (String input : noMatchInputs) {
+            csv.append(String.format("%s,,,,,\n", escapeCsv(input)));
+        }
+
+        Path outputPath = Path.of("build/reports/jmh/no_matched_recognition_result.csv");
+        Files.createDirectories(outputPath.getParent());
+        Files.write(outputPath, csv.toString().getBytes(StandardCharsets.UTF_8));
+        System.out.printf("[CSV] 노매치 저장 완료: %s (%d건)%n", outputPath, noMatchInputs.size());
+    }
+
+    /** 파이프라인 매칭 결과 중간 수집용 레코드 */
+    private record PipelineMatchResult(
+            String rawInput,
+            REFProductRecognitionOutput output,
+            String brand,        // null 가능 — 파서가 브랜드 못 찾은 경우
+            String completedBy   // "GroceryItemDictMatch" or "ProductIndexSearch"
+    ) {}
 }

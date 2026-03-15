@@ -53,7 +53,6 @@ public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
      * 사전이 DB에 존재하지 않으면 초기 사전을 생성하는 메서드
      * @param type 사전 타입 (EXCLUSION, GROCERY_ITEM, BRAND)
      */
-    @Transactional
     protected void initializeDictionary(REFRecognitionDictionaryType type,
                                         REFDictionaryInitializationStrategy strategy) {
         boolean exists = dictionaryRepository.existsByDictTypeAndDictName(
@@ -66,7 +65,10 @@ public class REFRecognitionDictionaryInitializer implements ApplicationRunner {
             log.info("[사전 생성] {}", type.getKorDictName());
         } else {
             dictionaryRepository.findByDictType(type)
-                    .ifPresent(strategy::supplementMissingEntries);
+                    .ifPresent(dict -> {
+                        strategy.removeDeletedEntries(dict);  // ← 먼저 삭제
+                        strategy.supplementMissingEntries(dict); // ← 그다음 추가
+                    });
             log.info("[사전 보완] {}", type.getKorDictName());
         }
     }

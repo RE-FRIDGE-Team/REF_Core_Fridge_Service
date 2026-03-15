@@ -158,7 +158,7 @@ def benchmarkPresets = [
 
         // ./gradlew jmh -Pbench=dataset
         dataset: [
-                includes      : ['com.refridge.benchmark.REFFullDatasetRecognitionBenchmark.fullDataset_exclusionFilter'],
+                includes      : ['com.refridge.benchmark.REFFullDatasetRecognitionBenchmark.fullDataset_pipeline'],
                 warmup        : 0,
                 iterations    : 1,
                 threads       : 1,

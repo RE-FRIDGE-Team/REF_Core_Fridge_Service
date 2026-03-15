@@ -5,10 +5,7 @@ import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepositoryCustom;
 import com.refridge.core_server.groceryItem.domain.vo.REFGroceryItemStatus;
-import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemDetailDTO;
-import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemForUpsertDto;
-import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemSummarizedDTO;
-import com.refridge.core_server.groceryItem.infra.persistence.dto.REFGroceryItemWithCategoryPathDto;
+import com.refridge.core_server.groceryItem.infra.persistence.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -198,5 +195,30 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                 )
                 .fetchOne();
 
-        return Optional.ofNullable(result);    }
+        return Optional.ofNullable(result);
+    }
+
+    @Override
+    public List<REFGroceryItemItemTypeDto> findItemTypesByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        return jpaQueryFactory
+                .select(Projections.constructor(
+                        REFGroceryItemItemTypeDto.class,
+                        rEFGroceryItem.id,
+                        rEFMinorGroceryCategory.itemType   // REFInventoryItemType enum
+                ))
+                .from(rEFGroceryItem)
+                // MinorCategory JOIN — minorCategoryId FK 기준
+                .innerJoin(rEFMinorGroceryCategory)
+                .on(rEFMinorGroceryCategory.id.eq(
+                        rEFGroceryItem.groceryCategoryReference.minorCategoryId))
+                .where(
+                        rEFGroceryItem.id.in(ids),
+                        rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
+                )
+                .fetch();
+    }
 }

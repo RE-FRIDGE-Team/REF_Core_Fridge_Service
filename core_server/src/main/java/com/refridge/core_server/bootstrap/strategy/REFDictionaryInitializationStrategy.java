@@ -24,4 +24,5 @@ public interface REFDictionaryInitializationStrategy {
      */
     void supplementMissingEntries(REFRecognitionDictionary dictionary);
 
+    default void removeDeletedEntries(REFRecognitionDictionary dictionary) {}
 }
