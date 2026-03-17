@@ -3,6 +3,28 @@ name: refridge
 services:
 
   # ────────────────────────────────────────
+  # Locust — 부하 테스트
+  # Web UI: http://localhost:8089
+  # ────────────────────────────────────────
+  locust:
+    container_name: refridge-locust
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
+    ports:
+      - '8089:8089'
+    volumes:
+      # locustfile.py 수정 시 컨테이너 재시작 없이 반영 (--reload 옵션과 함께)
+      - ./locust:/mnt/locust
+      - ./src/jmh/resources:/mnt/fixtures  # ← 픽스처 파일 마운트
+    command: >
+      -f /mnt/locust/locustfile.py
+      --host=http://host.docker.internal:8080
+      --web-port=8089
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ────────────────────────────────────────
   # 기존 인프라
   # ────────────────────────────────────────
   redis:
@@ -64,6 +86,7 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus
+
 
 volumes:
   mysql_data:
