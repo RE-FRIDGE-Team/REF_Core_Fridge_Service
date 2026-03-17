@@ -63,35 +63,20 @@ FIXTURES: list[str] = load_fixtures()
 
 def build_payload(requester_id: str) -> dict:
     return {
-        "inputText": random.choice(FIXTURES),
-        "requesterId": requester_id,
+        "raw_product_name": random.choice(FIXTURES)
     }
 
-
 def validate(response, context: str = "") -> None:
-    """
-    응답 검증 공통 로직.
-    5xx → 실패 처리.
-    200 + status 필드 있으면 성공 (COMPLETED / REJECTED / NO_MATCH 모두 정상).
-    """
     if response.status_code >= 500:
         response.failure(
             f"[{context}] 서버 에러 {response.status_code}: {response.text[:200]}"
         )
     elif response.status_code == 200:
-        try:
-            body = response.json()
-            if "status" not in body:
-                response.failure(f"[{context}] 응답에 status 필드 없음: {body}")
-            else:
-                response.success()
-        except Exception as e:
-            response.failure(f"[{context}] JSON 파싱 실패: {e}")
+        response.success()  # void 반환이므로 200이면 무조건 성공
     else:
         response.failure(
-            f"[{context}] 예상치 못한 응답 코드: {response.status_code}"
+            f"[{context}] 응답 코드: {response.status_code} body={response.text[:200]}"
         )
-
 
 # ── 시나리오 1: 평상시 (wait_time 있음, RPS 자연 수렴) ─────────────
 
@@ -111,22 +96,21 @@ class NormalUser(HttpUser):
 
     def on_start(self):
         import uuid
-        self.requester_id = str(uuid.uuid4())
         self.headers = {"Content-Type": "application/json"}
+        # requester_id 제거
 
     @task(10)
     def recognize_single(self):
-        """단건 제품명 인식 — 핵심 태스크"""
-        payload = build_payload(self.requester_id)
+        payload = {"raw_product_name": random.choice(FIXTURES)}  # 직접 생성
 
-        with self.client.post(
-            "/api/recognition",
+        with self.client.get(
+            "/recognize",
             json=payload,
             headers=self.headers,
-            name="POST /api/recognition",
+            name="GET /recognize",
             catch_response=True,
         ) as resp:
-            validate(resp, payload["inputText"])
+            validate(resp, payload["raw_product_name"])
 
     @task(1)
     def health_check(self):
@@ -152,22 +136,20 @@ class PeakUser(HttpUser):
 
     def on_start(self):
         import uuid
-        self.requester_id = str(uuid.uuid4())
         self.headers = {"Content-Type": "application/json"}
 
-    @task
-    def recognize_single_peak(self):
-        payload = build_payload(self.requester_id)
+    @task(10)
+    def recognize_single(self):
+        payload = {"raw_product_name": random.choice(FIXTURES)}  # 직접 생성
 
-        with self.client.post(
-            "/api/recognition",
+        with self.client.get(
+            "/recognize",
             json=payload,
             headers=self.headers,
-            name="POST /api/recognition [PEAK]",
+            name="GET /recognize",
             catch_response=True,
         ) as resp:
-            validate(resp, payload["inputText"])
-
+            validate(resp, payload["raw_product_name"])
 
 # ── 이벤트 훅 ────────────────────────────────────────────────────
 
@@ -183,6 +165,7 @@ def on_test_start(environment, **kwargs):
 @events.test_stop.add_listener
 def on_test_stop(environment, **kwargs):
     stats = environment.stats.total
+    p50 = stats.get_response_time_percentile(0.50) or 0
     p95 = stats.get_response_time_percentile(0.95) or 0
     p99 = stats.get_response_time_percentile(0.99) or 0
 
@@ -193,14 +176,12 @@ def on_test_stop(environment, **kwargs):
     print(f"실패 수:          {stats.num_failures:,} "
           f"({stats.num_failures / max(stats.num_requests, 1) * 100:.1f}%)")
     print(f"평균 응답시간:    {stats.avg_response_time:.1f}ms")
-    print(f"p50 응답시간:     {stats.get_response_time_percentile(0.50) or 0:.1f}ms")
+    print(f"p50 응답시간:     {p50:.1f}ms")
     print(f"p95 응답시간:     {p95:.1f}ms")
     print(f"p99 응답시간:     {p99:.1f}ms")
-    print(f"최대 RPS:         {stats.max_rps:.1f}")
 
-    # ── 목표 달성 여부 자동 판정 ──
-    TARGET_P95_MS  = 300   # UX 목표: p95 < 300ms
-    TARGET_FAILURE = 1.0   # 실패율 1% 미만
+    TARGET_P95_MS  = 300
+    TARGET_FAILURE = 1.0
 
     failure_rate = stats.num_failures / max(stats.num_requests, 1) * 100
     p95_ok       = p95 < TARGET_P95_MS
