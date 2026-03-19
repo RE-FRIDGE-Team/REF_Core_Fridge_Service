@@ -37,4 +37,11 @@ public record REFRecognitionResultResponse(
         );
     }
 
+    public static REFRecognitionResultResponse failure(String rawInput, String reason) {
+        return new REFRecognitionResultResponse(
+                false, false, "FAILED:" + reason,
+                rawInput, null, null, null,
+                null, null, null, null
+        );
+    }
 }

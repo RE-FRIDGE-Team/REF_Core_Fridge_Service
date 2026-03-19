@@ -3,26 +3,51 @@ name: refridge
 services:
 
   # ────────────────────────────────────────
-  # Locust — 부하 테스트
+  # Locust Master — Web UI + 결과 집계
   # Web UI: http://localhost:8089
   # ────────────────────────────────────────
-  locust:
-    container_name: refridge-locust
+  locust-master:
+    container_name: refridge-locust-master
     build:
       context: ./locust
       dockerfile: Dockerfile
     ports:
       - '8089:8089'
     volumes:
-      # locustfile.py 수정 시 컨테이너 재시작 없이 반영 (--reload 옵션과 함께)
       - ./locust:/mnt/locust
-      - ./src/jmh/resources:/mnt/fixtures  # ← 픽스처 파일 마운트
+      - ./src/jmh/resources:/mnt/fixtures
     command: >
-      -f /mnt/locust/locustfile.py
+      -f /mnt/locust/locustfile_batch_api_benchmark.py
       --host=http://host.docker.internal:8080
+      --class-picker
       --web-port=8089
+      --master
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # ────────────────────────────────────────
+  # Locust Workers — 실제 부하 생성 (CPU 분산)
+  # 워커 수 조절: docker compose up --scale locust-worker=4
+  # ────────────────────────────────────────
+  locust-worker:
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
+    volumes:
+      - ./locust:/mnt/locust
+      - ./src/jmh/resources:/mnt/fixtures
+    command: >
+      -f /mnt/locust/locustfile_batch_api_benchmark.py
+      --host=http://host.docker.internal:8080
+      --worker
+      --master-host=locust-master
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - locust-master
+    deploy:
+      replicas: 4
+
 
   # ────────────────────────────────────────
   # 기존 인프라

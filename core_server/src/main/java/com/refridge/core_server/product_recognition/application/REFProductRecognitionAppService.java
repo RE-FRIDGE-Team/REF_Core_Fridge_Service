@@ -9,12 +9,14 @@ import com.refridge.core_server.product_recognition.domain.REFProductRecognition
 import com.refridge.core_server.product_recognition.domain.service.REFRecognitionPipeline;
 import com.refridge.core_server.product_recognition.infra.pipeline.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class REFProductRecognitionAppService {
