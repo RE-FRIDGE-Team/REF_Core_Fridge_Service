@@ -20,7 +20,17 @@ import java.time.LocalDateTime;
 @Entity
 @SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
-@Table(name = "ref_product")
+@Table(name = "ref_product", indexes = {
+        // 완전 일치 + 상태 필터
+        @Index(name = "idx_product_name_status",
+                columnList = "product_name, status"),
+        // 브랜드 + 제품명 복합
+        @Index(name = "idx_product_brand_name_status",
+                columnList = "brand_name, product_name, status"),
+        // FK JOIN 최적화
+        @Index(name = "idx_product_grocery_item_id",
+                columnList = "grocery_item_id")
+})
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFProduct extends AbstractAggregateRoot<REFProduct> {

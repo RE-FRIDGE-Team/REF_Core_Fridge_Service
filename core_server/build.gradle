@@ -152,7 +152,7 @@ def benchmarkPresets = [
                 warmup        : 3,
                 iterations    : 5,
                 threads       : 1,      // runConcurrent 내부에서 threadCount @Param으로 제어
-                mode          : ['thrpt'],
+                mode          : ['avgt'],
                 timeUnit      : 'ms',
         ],
 
@@ -178,7 +178,7 @@ def benchmarkPresets = [
 ]
 
 // ── 선택된 프리셋 로드 (기본값: single) ──
-def selectedKey = project.findProperty('bench') ?: 'dataset'
+def selectedKey = project.findProperty('bench') ?: 'multi'
 def preset = benchmarkPresets[selectedKey]
 
 if (preset == null) {
