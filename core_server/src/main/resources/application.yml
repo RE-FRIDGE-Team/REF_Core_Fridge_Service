@@ -25,7 +25,7 @@ spring:
     hikari:
       maximum-pool-size: 20        # 기본 10 → 20으로 상향
       minimum-idle: 10             # 최소 유지 커넥션
-      connection-timeout: 5000     # 커넥션 대기 5초 (기본 30초는 너무 김)
+      connection-timeout: 10000     # 커넥션 대기 5초 (기본 30초는 너무 김)
       max-lifetime: 1800000        # 30분
 
   jpa:

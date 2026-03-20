@@ -37,6 +37,25 @@ public record REFRecognitionResultResponse(
         );
     }
 
+    /**
+     * 캐시된 파이프라인 결과로부터 응답 생성
+     */
+    public static REFRecognitionResultResponse from(REFCachedPipelineResult cached) {
+        return new REFRecognitionResultResponse(
+                true,
+                cached.rejected(),
+                cached.completedBy(),
+                cached.refinedText() != null ? cached.refinedText() : cached.originalText(),
+                cached.brandName(),
+                cached.quantity(),
+                cached.volume(),
+                cached.groceryItemId(),
+                cached.groceryItemName(),
+                cached.categoryPath(),
+                cached.imageUrl()
+        );
+    }
+
     public static REFRecognitionResultResponse failure(String rawInput, String reason) {
         return new REFRecognitionResultResponse(
                 false, false, "FAILED:" + reason,
