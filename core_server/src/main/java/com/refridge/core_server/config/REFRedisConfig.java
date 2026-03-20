@@ -78,12 +78,10 @@ public class REFRedisConfig {
      */
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory factory) {
-        // BasicPolymorphicTypeValidator: public API로 허용할 타입 패키지를 명시적으로 제한
-        // 역직렬화 시 허용되지 않은 타입이 들어오면 예외를 던져 보안 취약점을 방지합니다.
         var typeValidator = BasicPolymorphicTypeValidator.builder()
-                .allowIfBaseType(Object.class)          // 모든 Object 허용 (프로젝트 내부 DTO용)
-                .allowIfSubType("java.")                // java 표준 라이브러리 허용
-                .allowIfSubType("com.refridge.")        // 프로젝트 패키지만 허용
+                .allowIfBaseType(Object.class)
+                .allowIfSubType("java.")
+                .allowIfSubType("com.refridge.")
                 .build();
 
         GenericJacksonJsonRedisSerializer valueSerializer =
@@ -91,18 +89,25 @@ public class REFRedisConfig {
                         .enableDefaultTyping(typeValidator)
                         .build();
 
-        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(30))           // 기본 TTL 30분
+        // 기본 캐시 설정 (30분)
+        RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofMinutes(30))
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair
                                 .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
                         RedisSerializationContext.SerializationPair
                                 .fromSerializer(valueSerializer))
-                .disableCachingNullValues();                // null 캐싱 방지
+                .disableCachingNullValues();
+
+        // 인식 파이프라인 결과 캐시 (6시간)
+        // Product 데이터가 변경되기 전까지 동일 입력 → 동일 결과 보장
+        RedisCacheConfiguration recognitionConfig = defaultConfig
+                .entryTtl(Duration.ofHours(6));
 
         return RedisCacheManager.builder(factory)
-                .cacheDefaults(config)
+                .cacheDefaults(defaultConfig)
+                .withCacheConfiguration("recognition:pipeline-result", recognitionConfig)
                 .build();
     }
 }

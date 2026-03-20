@@ -1,4 +1,8 @@
 spring:
+  threads:
+    virtual:
+      enabled: true
+
   data:
     redis:
       host: ${REDIS_HOST}
@@ -18,6 +22,11 @@ spring:
     url: jdbc:mysql://localhost:3306/${MYSQL_DATABASE}?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true&profileSQL=true&logger=Slf4JLogger
     username: root
     password: ${MYSQL_ROOT_PASSWORD}
+    hikari:
+      maximum-pool-size: 20        # 기본 10 → 20으로 상향
+      minimum-idle: 10             # 최소 유지 커넥션
+      connection-timeout: 10000     # 커넥션 대기 5초 (기본 30초는 너무 김)
+      max-lifetime: 1800000        # 30분
 
   jpa:
     open-in-view: true

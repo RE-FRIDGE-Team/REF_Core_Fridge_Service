@@ -16,7 +16,11 @@ import java.util.Optional;
 @Entity
 @SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
-@Table(name = "ref_grocery_item")
+@Table(name = "ref_grocery_item",
+        indexes = {
+                @Index(name = "idx_grocery_item_category_refs",
+                        columnList = "major_category_id, minor_category_id")
+        })
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
@@ -153,7 +157,7 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
         return this.groceryCategoryReference.getMinorCategoryId();
     }
 
-    public String getCategoryNameValue(){
+    public String getCategoryNameValue() {
         return this.groceryItemName.getValue();
     }
 }
