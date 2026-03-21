@@ -28,7 +28,7 @@
 | Cache | Redis + StringRedisTemplate |
 | Observability | Micrometer + Prometheus + Grafana |
 | Profiling | AOP 기반 핸들러별 레이턴시 계측, JMH 벤치마크 |
-| LoadTest | Locust(Master-Slave) |
+| Load Test | Locust (Master-Slave 분산 구조) |
 | Build | Gradle |
 
 <br>
@@ -58,19 +58,19 @@ Core Fridge Service는 Flutter 클라이언트로부터 REST 요청을 수신하
   │
   ▼
 ┌─────────────────────────────────┐
-│ 1. Exclusion Filter Handler     │  ← 비식품(세제, 비닐 등) 사전 필터링
+│ 1. Name Parser Handler          │  ← 브랜드·노이즈 제거, 핵심 식재료명 추출
 └──────────────┬──────────────────┘
                ▼
 ┌─────────────────────────────────┐
-│ 2. Name Parser Handler          │  ← 브랜드·노이즈 제거, 핵심 식재료명 추출
+│ 2. Exclusion Filter Handler     │  ← 비식품(세제, 비닐 등) 사전 필터링
 └──────────────┬──────────────────┘
                ▼
 ┌─────────────────────────────────┐
-│ 3. Dictionary Match Handler     │  ← 정제된 이름으로 식재료 사전 정확 매칭
+│ 3. Dictionary Match Handler     │  ← 식재료 사전 속 단어가 단일로 포함된 경우 매칭
 └──────────────┬──────────────────┘
                ▼
 ┌─────────────────────────────────┐
-│ 4. Product Index Search Handler │  ← 상품 인덱스 DB 유사도 검색 (Bottleneck)
+│ 4. Product Index Search Handler │  ← 상품 인덱스 DB LIKE / 역LIKE 연산 검색 (Bottleneck)
 └──────────────┬──────────────────┘
                ▼
 ┌─────────────────────────────────┐
@@ -82,11 +82,11 @@ Core Fridge Service는 Flutter 클라이언트로부터 REST 요청을 수신하
 
 | 순서 | 핸들러 | 역할 | 비고 |
 |:---:|---|---|---|
-| 1 | **ExclusionFilterHandler** | 비식품 키워드(세제, 봉투, 건전지 등) 감지 시 즉시 `NO_MATCH` 반환 | 불필요한 파이프라인 진입 차단 |
-| 2 | **NameParserHandler** | Aho-Corasick 기반 브랜드 매칭, 40+ 정규식 노이즈 패턴 제거, 핵심 식재료명 정제 | Early-skip 최적화 적용 |
-| 3 | **DictionaryMatchHandler** | 정제된 이름으로 인메모리 식재료 사전과 정확 매칭 시도 | 사전 타입별 Strategy 패턴 |
-| 4 | **ProductIndexSearchHandler** | 상품 인덱스 DB 대상 유사도 기반 검색 | 레이턴시 병목 구간 |
-| 5 | **MLPredictionHandler** | 외부 ML 서비스 호출을 통한 개방형 식재료 분류 | Confidence 기반 라우팅 |
+| 1 | **NameParserHandler** | Aho-Corasick 기반 브랜드 매칭, 40+ 정규식 노이즈 패턴 제거, 핵심 식재료명 정제 | Early-skip 최적화 적용 |
+| 2 | **ExclusionFilterHandler** | 비식품 키워드(세제, 봉투, 건전지 등) 감지 시 즉시 `REJECTED` 반환 | Aho-Corasick Trie + Word Boundary 검증 |
+| 3 | **DictionaryMatchHandler** | 식재료 사전 속 단어가 정제된 제품명에 단일로 포함된 경우 매칭 | 2개 이상 매칭 시 다음 단계로 위임 |
+| 4 | **ProductIndexSearchHandler** | 상품 인덱스 DB 대상 LIKE / 역LIKE 연산 기반 검색 및 우선순위 매칭 | 레이턴시 병목 구간 |
+| 5 | **MLPredictionHandler** | 외부 ML 서비스 호출을 통한 개방형 식재료 분류 | `TODO`: DAPT-KoBERT 연동 예정 |
 
 <br>
 
@@ -118,21 +118,76 @@ Grafana 대시보드 지표를 통해 최적화 전후의 핸들러별 레이턴
 ## 📂 프로젝트 구조
 
 ```
-src/main/java/com/ref/fridge/
-├── domain/                    # 도메인 계층
-│   ├── fridge/                #   냉장고 Aggregate Root, Value Objects
-│   ├── grocery/               #   식료품 도메인
-│   └── recognition/           #   상품 인식 도메인 (Pipeline, Handlers)
-├── application/               # 서비스 계층
-│   ├── service/               #   Command / Query 서비스
-│   └── dto/                   #   Command, Query, Result DTO
-├── infrastructure/            # 인프라 계층
-│   ├── persistence/           #   JPA Repository 구현체
-│   ├── redis/                 #   RedisCacheService (Generic)
-│   ├── recognition/           #   핸들러 인프라 구현체
-│   └── bootstrap/             #   ApplicationRunner 기반 데이터 초기화
-└── interfaces/                # 인터페이스 계층
-    └── api/                   #   REST Controller
+core_server/src/main/java/com/refridge/core_server/
+│
+├── bootstrap/                              # 애플리케이션 초기화 (ApplicationRunner)
+│   ├── dto/                                #   CSV/JSON 파싱용 DTO
+│   └── strategy/                           #   사전 초기화 Strategy 패턴 구현체
+│
+├── common/                                 # 공통 모듈
+│   ├── REFEntityTimeMetaData               #   엔티티 시간 메타데이터 (@Embeddable)
+│   └── REFQueryDslConfig                   #   QueryDSL JPAQueryFactory 설정
+│
+├── config/                                 # 인프라 설정
+│   └── REFRedisConfig                      #   Redis + CacheManager 설정
+│
+├── groceryItem/                            # 식재료 Bounded Context
+│   ├── application/                        #   서비스 (LifeCycle, Query, Categorical, InformationUpdate)
+│   │   ├── dto/command/                    #     Command DTO (Create, Delete, Update, CategoryChange)
+│   │   ├── dto/query/                      #     Query DTO
+│   │   ├── dto/result/                     #     Result DTO (Summary, Detail, Upsert, ProductNameMatch)
+│   │   └── mapper/                         #     MapStruct 매퍼
+│   ├── domain/                             #   도메인 계층
+│   │   ├── ar/REFGroceryItem               #     Aggregate Root (@Entity)
+│   │   ├── service/                        #     도메인 서비스 (카테고리 검증)
+│   │   ├── dto/                            #     도메인 DTO
+│   │   └── vo/                             #     Value Objects (Name, Status, Classification, Image, CategoryRef)
+│   └── infra/                              #   인프라 계층
+│       └── persistence/                    #     QueryDSL Repository 구현체 + Projection DTO
+│
+├── grocery_category/                       # 카테고리 Bounded Context
+│   ├── application/                        #   서비스 (LifeCycle, InformationQuery)
+│   │   ├── dto/command/                    #     Command DTO (Major/Minor Create, Remove)
+│   │   ├── dto/result/                     #     Result DTO (Hierarchy, BulkCreation)
+│   │   └── mapper/                         #     계층 구조 결과 매퍼
+│   ├── domain/                             #   도메인 계층
+│   │   ├── ar/                             #     Aggregate Roots (MajorCategory, MinorCategory)
+│   │   └── vo/                             #     Value Objects (CategoryName, ColorTag, ItemType, TypeGroup)
+│   └── infra/                              #   인프라 계층
+│       └── persistence/                    #     QueryDSL Repository 구현체 + Projection DTO
+│
+├── product/                                # 식제품 Bounded Context
+│   ├── application/                        #   서비스 (LifeCycle - upsert)
+│   ├── domain/                             #   도메인 계층
+│   │   ├── ar/REFProduct                   #     Aggregate Root (@Entity)
+│   │   └── vo/                             #     Value Objects (ProductName, BrandName, Type, Status, GroceryItemRef)
+│   └── infra/                              #   인프라 계층
+│       ├── converter/                      #     JPA AttributeConverter (Status, Type)
+│       ├── dto/                            #     검색 결과 Projection DTO
+│       └── persistence/                    #     QueryDSL Repository (LIKE/역LIKE 매칭 로직)
+│
+└── product_recognition/                    # 상품 인식 Bounded Context
+    ├── application/                        #   서비스 (Recognition, Batch, PipelineCache)
+    │   └── dto/                            #     Command / Result DTO (Cached, Batch, Response)
+    ├── domain/                             #   도메인 계층
+    │   ├── ar/                             #     Aggregate Roots (ProductRecognition, RecognitionDictionary)
+    │   ├── pipeline/                       #     파이프라인 코어 (Context, Handler 인터페이스)
+    │   ├── service/                        #     도메인 서비스 (REFRecognitionPipeline)
+    │   ├── port/                           #     포트 인터페이스 (Parser, Matcher, Searcher, MLClient)
+    │   ├── dto/                            #     도메인 DTO (DictMatch, IndexSearch, MLPrediction)
+    │   ├── event/                          #     도메인 이벤트 (Completed, DictionarySynced)
+    │   └── vo/                             #     Value Objects (Status, ProcessingPath, DictionaryType, Entry 등)
+    ├── infra/                              #   인프라 계층
+    │   ├── pipeline/                       #     핸들러 구현체 5종 (Exclusion, NameParsing, DictMatch, IndexSearch, ML)
+    │   ├── adapter/                        #     포트 구현체 (Aho-Corasick Matcher, QueryAdapter, Parser)
+    │   ├── aop/                            #     AOP 성능 계측 (@Profile("perf"))
+    │   ├── sync/                           #     사전 동기화 (DB → Redis → Trie)
+    │   ├── converter/                      #     JPA AttributeConverter
+    │   ├── mapper/                         #     MapStruct 매퍼 (Cross-Context ACL)
+    │   └── dto/                            #     인프라 DTO
+    └── presentation/                       #   프레젠테이션 계층
+        ├── dto/                            #     Request DTO (단건, 배치)
+        └── mapper/                         #     Request → Command 매퍼
 ```
 
 <br>
