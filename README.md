@@ -28,7 +28,7 @@
 | Cache | Redis + StringRedisTemplate |
 | Observability | Micrometer + Prometheus + Grafana |
 | Profiling | AOP 기반 핸들러별 레이턴시 계측, JMH 벤치마크 |
-| Testing | Spock / Groovy (Object Mother + Fixture Trait) |
+| LoadTest | Locust(Master-Slave) |
 | Build | Gradle |
 
 <br>
