@@ -1,7 +1,6 @@
 package com.refridge.core_server.recognition_feedback.domain.event;
 
 import com.refridge.core_server.recognition_feedback.domain.vo.*;
-import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionId;
 
 /**
  * 사용자가 인식 결과를 수정(부정 피드백)했을 때 발행되는 도메인 이벤트입니다.
@@ -15,15 +14,15 @@ import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionId;
  *   <li>핸들러 품질 메트릭: completedBy 기준 부정 피드백 비율 집계</li>
  * </ul>
  *
- * @param feedbackId    피드백 AR ID
- * @param recognitionId 연관된 인식 결과 ID
- * @param snapshot      인식 시점의 결과 스냅샷
- * @param correction    사용자가 수정한 데이터
- * @param diff          원본 vs 수정의 차이 요약
+ * @param feedbackId           피드백 AR ID
+ * @param recognitionReference 연관된 인식 결과 참조
+ * @param snapshot             인식 시점의 결과 스냅샷
+ * @param correction           사용자가 수정한 데이터
+ * @param diff                 원본 vs 수정의 차이 요약
  */
 public record REFNegativeFeedbackEvent(
         REFRecognitionFeedbackId feedbackId,
-        REFRecognitionId recognitionId,
+        REFRecognitionReference recognitionReference,
         REFOriginalRecognitionSnapshot snapshot,
         REFUserCorrectionData correction,
         REFCorrectionDiff diff

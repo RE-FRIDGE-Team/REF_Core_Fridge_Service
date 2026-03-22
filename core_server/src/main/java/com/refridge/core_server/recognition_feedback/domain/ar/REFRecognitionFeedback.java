@@ -1,8 +1,6 @@
 package com.refridge.core_server.recognition_feedback.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
-import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionId;
-import com.refridge.core_server.product_recognition.domain.vo.REFRequesterId;
 import com.refridge.core_server.recognition_feedback.domain.event.REFNegativeFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.event.REFPositiveFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.vo.*;
@@ -20,10 +18,11 @@ import java.time.LocalDateTime;
  *
  * <h3>생명주기</h3>
  * <pre>
- *   PENDING ──→ APPROVED  (긍정 피드백: 사용자가 인식 결과 승인)
- *          ├──→ CORRECTED (부정 피드백: 사용자가 인식 결과 수정)
- *          └──→ EXPIRED   (배치: 일정 기간 미응답)
+ *   PENDING ──→ APPROVED   (사용자 승인 또는 미응답 자동 승인)
+ *          └──→ CORRECTED  (사용자가 인식 결과 수정)
  * </pre>
+ * 미응답 시에도 APPROVED로 처리합니다 — 사용자가 별도 수정 없이 넘어간 경우
+ * 인식 결과에 이의가 없다고 판단합니다.
  *
  * <h3>불변식</h3>
  * <ul>
@@ -34,7 +33,7 @@ import java.time.LocalDateTime;
  *
  * <h3>도메인 이벤트</h3>
  * <ul>
- *   <li>{@link REFPositiveFeedbackEvent} — 승인 시 발행</li>
+ *   <li>{@link REFPositiveFeedbackEvent} — 승인 시 발행 (자동 승인 포함)</li>
  *   <li>{@link REFNegativeFeedbackEvent} — 수정 시 발행</li>
  * </ul>
  */
@@ -64,13 +63,11 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
 
     /** 연관된 인식 결과 참조 (1:1) */
     @Embedded
-    @AttributeOverride(name = "value", column = @Column(name = "recognition_id", nullable = false))
-    private REFRecognitionId recognitionId;
+    private REFRecognitionReference recognitionReference;
 
     /** 피드백을 생성한 사용자 */
     @Embedded
-    @AttributeOverride(name = "id", column = @Column(name = "requester_id", nullable = false))
-    private REFRequesterId requesterId;
+    private REFRequesterReference requesterReference;
 
     /** 현재 피드백 상태 */
     @Column(name = "status", nullable = false, length = 2)
@@ -93,17 +90,19 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
     @Embedded
     private REFEntityTimeMetaData timeMetaData;
 
-    /** 승인 시점 */
-    @Column(name = "approved_at")
-    private LocalDateTime approvedAt;
+    /** 피드백 처리 완료 시점 (승인 또는 수정) */
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
 
-    /** 수정 시점 */
-    @Column(name = "corrected_at")
-    private LocalDateTime correctedAt;
+    /** 자동 승인 여부 — 배치에 의해 자동 승인된 경우 true */
+    @Column(name = "auto_approved", nullable = false)
+    private boolean autoApproved;
 
     /** 낙관적 잠금 — 동시 수정 방지 */
     @Version
     private int version;
+
+    /* ──────────────────── JPA 라이프사이클 ──────────────────── */
 
     @PrePersist
     protected void onCreate() {
@@ -120,29 +119,32 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         }
     }
 
+    /* ──────────────────── FACTORY METHOD ──────────────────── */
+
     /**
      * 인식 완료 직후 PENDING 상태의 피드백을 생성합니다.
      * <p>
      * recognize() 내부에서 동기적으로 호출되어 feedbackId를 응답에 포함시킵니다.
      *
-     * @param recognitionId 연관된 인식 결과 ID
-     * @param requesterId   요청 사용자 ID
-     * @param snapshot      인식 결과 스냅샷
+     * @param recognitionReference 연관된 인식 결과 참조
+     * @param requesterReference   요청 사용자 참조
+     * @param snapshot             인식 결과 스냅샷
      * @return PENDING 상태의 피드백 AR
      */
     public static REFRecognitionFeedback createPending(
-            REFRecognitionId recognitionId,
-            REFRequesterId requesterId,
+            REFRecognitionReference recognitionReference,
+            REFRequesterReference requesterReference,
             REFOriginalRecognitionSnapshot snapshot) {
 
         REFRecognitionFeedback feedback = new REFRecognitionFeedback();
         feedback.id = REFRecognitionFeedbackId.generate();
-        feedback.recognitionId = recognitionId;
-        feedback.requesterId = requesterId;
+        feedback.recognitionReference = recognitionReference;
+        feedback.requesterReference = requesterReference;
         feedback.status = REFFeedbackStatus.PENDING;
         feedback.originalSnapshot = snapshot;
         feedback.userCorrection = null;
         feedback.correctionDiff = null;
+        feedback.autoApproved = false;
 
         LocalDateTime now = LocalDateTime.now();
         feedback.timeMetaData = new REFEntityTimeMetaData(now, now);
@@ -163,20 +165,22 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
      */
     public void approve(Long purchasePrice) {
         validatePendingStatus();
+        completeAsApproved(purchasePrice, false);
+    }
 
-        this.status = REFFeedbackStatus.APPROVED;
-        this.approvedAt = LocalDateTime.now();
-
-        if (purchasePrice != null) {
-            this.userCorrection = REFUserCorrectionData.priceOnly(purchasePrice);
+    /**
+     * 미응답 피드백을 자동 승인 처리합니다 (배치 전용).
+     * <p>
+     * 사용자가 별도 수정 없이 넘어간 경우 인식 결과에 이의가 없다고 판단합니다.
+     * {@code autoApproved = true}로 마킹되어 일반 승인과 구분됩니다.
+     * <p>
+     * 이미 APPROVED/CORRECTED인 경우 아무 동작도 하지 않습니다 (멱등).
+     */
+    public void autoApprove() {
+        if (!this.status.isPending()) {
+            return;
         }
-
-        registerEvent(new REFPositiveFeedbackEvent(
-                this.id,
-                this.recognitionId,
-                this.originalSnapshot,
-                purchasePrice
-        ));
+        completeAsApproved(null, true);
     }
 
     /**
@@ -196,27 +200,15 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         this.status = REFFeedbackStatus.CORRECTED;
         this.userCorrection = correction;
         this.correctionDiff = REFCorrectionDiff.calculate(this.originalSnapshot, correction);
-        this.correctedAt = LocalDateTime.now();
+        this.resolvedAt = LocalDateTime.now();
 
         registerEvent(new REFNegativeFeedbackEvent(
                 this.id,
-                this.recognitionId,
+                this.recognitionReference,
                 this.originalSnapshot,
                 this.userCorrection,
                 this.correctionDiff
         ));
-    }
-
-    /**
-     * 미응답 피드백을 만료 처리합니다 (배치 전용).
-     * <p>
-     * PENDING 상태인 경우에만 APPROVED로 전이합니다.
-     * 이미 APPROVED/CORRECTED인 경우 아무 동작도 하지 않습니다.
-     */
-    public void expire() {
-        if (this.status.isPending()) {
-            this.status = REFFeedbackStatus.APPROVED;
-        }
     }
 
     /* ──────────────────── QUERY METHOD ──────────────────── */
@@ -236,12 +228,38 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         return this.status.isPending();
     }
 
+    /** 배치에 의해 자동 승인되었는지 */
+    public boolean isAutoApproved() {
+        return this.autoApproved;
+    }
+
     /** 어느 핸들러에서 인식이 완료되었는지 */
     public String getCompletedByHandler() {
         return this.originalSnapshot.getCompletedBy();
     }
 
-    /* ──────────────────── VALIDATION ──────────────────── */
+    /* ──────────────────── INTERNAL ──────────────────── */
+
+    /**
+     * APPROVED 상태로 전이하는 공통 로직.
+     * 사용자 승인과 자동 승인 모두 이 메서드를 통해 처리됩니다.
+     */
+    private void completeAsApproved(Long purchasePrice, boolean isAutoApproved) {
+        this.status = REFFeedbackStatus.APPROVED;
+        this.resolvedAt = LocalDateTime.now();
+        this.autoApproved = isAutoApproved;
+
+        if (purchasePrice != null) {
+            this.userCorrection = REFUserCorrectionData.priceOnly(purchasePrice);
+        }
+
+        registerEvent(new REFPositiveFeedbackEvent(
+                this.id,
+                this.recognitionReference,
+                this.originalSnapshot,
+                purchasePrice
+        ));
+    }
 
     private void validatePendingStatus() {
         if (!this.status.isPending()) {
