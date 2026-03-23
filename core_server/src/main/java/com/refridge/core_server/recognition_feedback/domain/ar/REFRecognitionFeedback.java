@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * 인식 결과에 대한 사용자 피드백을 관리하는 Aggregate Root입니다.
@@ -236,6 +237,21 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
     /** 어느 핸들러에서 인식이 완료되었는지 */
     public String getCompletedByHandler() {
         return this.originalSnapshot.getCompletedBy();
+    }
+
+    /** 인식 결과 스냅샷 — Domain Service에서 diff 계산 시 사용 */
+    public REFOriginalRecognitionSnapshot getOriginalSnapshot() {
+        return this.originalSnapshot;
+    }
+
+    /** 인식 결과 ID 값 */
+    public UUID getRecognitionIdValue() {
+        return this.recognitionReference.getRecognitionId();
+    }
+
+    /** 요청자 ID 값 */
+    public UUID getRequesterIdValue() {
+        return this.requesterReference.getRequesterId();
     }
 
     /* ──────────────────── INTERNAL ──────────────────── */
