@@ -27,12 +27,14 @@ public class REFAhoCorasickExclusionWordMatcher implements REFExclusionWordMatch
 
     @Override
     public Optional<String> findMatch(String input) {
-        if (trie == null) {
+        Trie currentTrie = this.trie;
+
+        if (currentTrie == null) {
             log.warn("Exclusion Trie가 초기화되지 않았습니다. 필터링을 건너뜁니다.");
             return Optional.empty();
         }
 
-        Collection<Emit> emits = trie.parseText(input);
+        Collection<Emit> emits = currentTrie.parseText(input);
 
         if (emits.isEmpty()) {
             return Optional.empty();

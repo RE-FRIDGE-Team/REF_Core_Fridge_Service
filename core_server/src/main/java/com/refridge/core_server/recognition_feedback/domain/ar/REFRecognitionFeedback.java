@@ -1,6 +1,7 @@
 package com.refridge.core_server.recognition_feedback.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
+import com.refridge.core_server.recognition_feedback.domain.REFRecognitionFeedbackRepository;
 import com.refridge.core_server.recognition_feedback.domain.event.REFNegativeFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.event.REFPositiveFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.vo.*;
@@ -120,37 +121,61 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         }
     }
 
-    /* ──────────────────── FACTORY METHOD ──────────────────── */
+    /* ──────────────────── INTERNAL CONSTRUCTOR ──────────────────── */
+
+    private REFRecognitionFeedback(REFRecognitionReference recognitionReference,
+                                   REFRequesterReference requesterReference,
+                                   REFOriginalRecognitionSnapshot snapshot) {
+        this.id = REFRecognitionFeedbackId.generate();
+        this.recognitionReference = recognitionReference;
+        this.requesterReference = requesterReference;
+        this.status = REFFeedbackStatus.PENDING;
+        this.originalSnapshot = snapshot;
+        this.userCorrection = null;
+        this.correctionDiff = null;
+        this.autoApproved = false;
+
+        LocalDateTime now = LocalDateTime.now();
+        this.timeMetaData = new REFEntityTimeMetaData(now, now);
+    }
+
+    /* ──────────────────── CREATION FACTORY METHOD ──────────────────── */
 
     /**
-     * 인식 완료 직후 PENDING 상태의 피드백을 생성합니다.
-     * <p>
-     * recognize() 내부에서 동기적으로 호출되어 feedbackId를 응답에 포함시킵니다.
-     *
-     * @param recognitionReference 연관된 인식 결과 참조
-     * @param requesterReference   요청 사용자 참조
-     * @param snapshot             인식 결과 스냅샷
-     * @return PENDING 상태의 피드백 AR
+     * PENDING 상태의 피드백 엔티티를 생성합니다.
+     * 저장은 포함하지 않습니다 — 중복 체크 없이 순수 생성만 수행.
      */
-    public static REFRecognitionFeedback createPending(
+    public static REFRecognitionFeedback create(
             REFRecognitionReference recognitionReference,
             REFRequesterReference requesterReference,
             REFOriginalRecognitionSnapshot snapshot) {
 
-        REFRecognitionFeedback feedback = new REFRecognitionFeedback();
-        feedback.id = REFRecognitionFeedbackId.generate();
-        feedback.recognitionReference = recognitionReference;
-        feedback.requesterReference = requesterReference;
-        feedback.status = REFFeedbackStatus.PENDING;
-        feedback.originalSnapshot = snapshot;
-        feedback.userCorrection = null;
-        feedback.correctionDiff = null;
-        feedback.autoApproved = false;
+        return new REFRecognitionFeedback(recognitionReference, requesterReference, snapshot);
+    }
 
-        LocalDateTime now = LocalDateTime.now();
-        feedback.timeMetaData = new REFEntityTimeMetaData(now, now);
+    /**
+     * PENDING 상태의 피드백을 생성하고 저장합니다.
+     * <p>
+     * 동일 recognitionId에 대해 이미 피드백이 존재하면 기존 피드백을 반환합니다 (멱등).
+     * recognize() 내부에서 동기적으로 호출됩니다.
+     *
+     * @param recognitionReference 인식 결과 참조
+     * @param requesterReference   요청자 참조
+     * @param snapshot             인식 결과 스냅샷
+     * @param repository           피드백 저장소
+     * @return 생성되었거나 이미 존재하는 피드백
+     */
+    public static REFRecognitionFeedback createAndSave(
+            REFRecognitionReference recognitionReference,
+            REFRequesterReference requesterReference,
+            REFOriginalRecognitionSnapshot snapshot,
+            REFRecognitionFeedbackRepository repository) {
 
-        return feedback;
+        return repository.findByRecognitionId(recognitionReference.getRecognitionId())
+                .orElseGet(() -> {
+                    REFRecognitionFeedback feedback = create(recognitionReference, requesterReference, snapshot);
+                    return repository.save(feedback);
+                });
     }
 
     /* ──────────────────── BUSINESS LOGIC ──────────────────── */
@@ -159,7 +184,7 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
      * 사용자가 인식 결과를 승인합니다 (긍정 피드백).
      * <p>
      * 승인 시에도 구매 가격을 입력할 수 있습니다.
-     * {@link REFPositiveFeedbackEvent}가 발행되어 집계 및 Product 자동 등록에 활용됩니다.
+     * {@link REFPositiveFeedbackEvent}가 발행됩니다.
      *
      * @param purchasePrice 구매 가격 (nullable)
      * @throws IllegalStateException PENDING 상태가 아닌 경우
@@ -185,31 +210,31 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
     }
 
     /**
-     * 사용자가 인식 결과를 수정합니다 (부정 피드백).
+     * 사용자가 수정 폼을 제출했을 때 호출합니다.
      * <p>
-     * 원본 스냅샷과 수정 데이터의 차이가 자동 계산되어 {@link REFCorrectionDiff}로 저장됩니다.
-     * {@link REFNegativeFeedbackEvent}가 발행되어 사전 보강 등 개선 액션에 활용됩니다.
+     * 원본 스냅샷과 수정 데이터의 diff를 직접 계산하여 실질적 변경 여부를 판단합니다:
+     * <ul>
+     *   <li>실질적 변경 없음 (가격만 입력 등) → APPROVED 처리</li>
+     *   <li>실질적 변경 있음 → CORRECTED 처리 + diff 저장</li>
+     * </ul>
      *
-     * @param correction 사용자 수정 데이터
+     * @param correctionData 사용자 수정 데이터
      * @throws IllegalStateException    PENDING 상태가 아닌 경우
-     * @throws IllegalArgumentException correction이 null인 경우
+     * @throws IllegalArgumentException correctionData가 null인 경우
      */
-    public void correct(REFUserCorrectionData correction) {
+    public void resolveWithCorrection(REFUserCorrectionData correctionData) {
         validatePendingStatus();
-        validateCorrectionNotNull(correction);
+        validateCorrectionNotNull(correctionData);
 
-        this.status = REFFeedbackStatus.CORRECTED;
-        this.userCorrection = correction;
-        this.correctionDiff = REFCorrectionDiff.calculate(this.originalSnapshot, correction);
-        this.resolvedAt = LocalDateTime.now();
+        REFCorrectionDiff diff = REFCorrectionDiff.calculate(this.originalSnapshot, correctionData);
 
-        registerEvent(new REFNegativeFeedbackEvent(
-                this.id,
-                this.recognitionReference,
-                this.originalSnapshot,
-                this.userCorrection,
-                this.correctionDiff
-        ));
+        if (diff.hasNoChanges()) {
+            // 실질적 변경 없음 → 승인 (가격이 있으면 함께 저장)
+            completeAsApproved(correctionData.getPurchasePrice(), false);
+        } else {
+            // 실질적 변경 있음 → 수정
+            applyCorrection(correctionData, diff);
+        }
     }
 
     /* ──────────────────── QUERY METHOD ──────────────────── */
@@ -239,7 +264,7 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         return this.originalSnapshot.getCompletedBy();
     }
 
-    /** 인식 결과 스냅샷 — Domain Service에서 diff 계산 시 사용 */
+    /** 인식 결과 스냅샷 */
     public REFOriginalRecognitionSnapshot getOriginalSnapshot() {
         return this.originalSnapshot;
     }
@@ -258,7 +283,7 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
 
     /**
      * APPROVED 상태로 전이하는 공통 로직.
-     * 사용자 승인과 자동 승인 모두 이 메서드를 통해 처리됩니다.
+     * 사용자 승인, 자동 승인, 실질적 변경 없는 수정 폼 제출 모두 이 메서드를 통해 처리.
      */
     private void completeAsApproved(Long purchasePrice, boolean isAutoApproved) {
         this.status = REFFeedbackStatus.APPROVED;
@@ -277,6 +302,25 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         ));
     }
 
+    /**
+     * CORRECTED 상태로 전이. 이미 계산된 diff를 저장하고 이벤트 발행.
+     * resolveWithCorrection()에서만 호출됩니다.
+     */
+    private void applyCorrection(REFUserCorrectionData correctionData, REFCorrectionDiff diff) {
+        this.status = REFFeedbackStatus.CORRECTED;
+        this.userCorrection = correctionData;
+        this.correctionDiff = diff;
+        this.resolvedAt = LocalDateTime.now();
+
+        registerEvent(new REFNegativeFeedbackEvent(
+                this.id,
+                this.recognitionReference,
+                this.originalSnapshot,
+                this.userCorrection,
+                this.correctionDiff
+        ));
+    }
+
     private void validatePendingStatus() {
         if (!this.status.isPending()) {
             throw new IllegalStateException(
@@ -284,8 +328,8 @@ public class REFRecognitionFeedback extends AbstractAggregateRoot<REFRecognition
         }
     }
 
-    private void validateCorrectionNotNull(REFUserCorrectionData correction) {
-        if (correction == null) {
+    private void validateCorrectionNotNull(REFUserCorrectionData correctionData) {
+        if (correctionData == null) {
             throw new IllegalArgumentException("수정 데이터는 필수입니다.");
         }
     }
