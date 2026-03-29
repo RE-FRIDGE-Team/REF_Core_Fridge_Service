@@ -53,6 +53,14 @@ public class REFOriginalRecognitionSnapshot {
     @Column(name = "orig_completed_by")
     private String completedBy;
 
+    /** 비식재료 필터에 의해 반려되었는지 */
+    @Column(name = "orig_rejected")
+    private boolean rejected;
+
+    /** 반려 시 매칭된 비식재료 키워드 (반려가 아니면 null) */
+    @Column(name = "orig_rejection_keyword")
+    private String rejectionKeyword;
+
     public static REFOriginalRecognitionSnapshot of(
             String productName,
             Long groceryItemId,
@@ -63,12 +71,15 @@ public class REFOriginalRecognitionSnapshot {
             String volume,
             String volumeUnit,
             String imageUrl,
-            String completedBy
+            String completedBy,
+            boolean rejected,
+            String rejectionKeyword
     ) {
         return new REFOriginalRecognitionSnapshot(
                 productName, groceryItemId, groceryItemName,
                 categoryPath, brandName, quantity, volume,
-                volumeUnit, imageUrl, completedBy
+                volumeUnit, imageUrl, completedBy,
+                rejected, rejectionKeyword
         );
     }
 }

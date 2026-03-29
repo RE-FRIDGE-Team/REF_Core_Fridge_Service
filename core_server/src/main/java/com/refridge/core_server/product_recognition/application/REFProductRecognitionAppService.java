@@ -8,6 +8,7 @@ import com.refridge.core_server.product_recognition.domain.event.REFRecognitionC
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.REFProductRecognitionRepository;
 import com.refridge.core_server.product_recognition.domain.service.REFRecognitionPipeline;
+import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
 import com.refridge.core_server.product_recognition.infra.pipeline.*;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,6 @@ public class REFProductRecognitionAppService {
     private final ApplicationEventPublisher eventPublisher;
     private final REFRecognitionPipelineCacheService pipelineCacheService;
 
-    /* 핸들러 주입 (순서가 곧 파이프라인 순서) */
     private final REFExclusionFilterHandler exclusionFilterHandler;
     private final REFProductNameParsingHandler productNameParsingHandler;
     private final REFGroceryItemDictMatchHandler groceryItemDictMatchHandler;
@@ -36,7 +36,7 @@ public class REFProductRecognitionAppService {
 
     @Transactional
     public REFRecognitionResultResponse recognize(REFRecognitionRequestCommand command) {
-        // 1. AR 생성 및 저장 — 항상 실행 (인식 이력 기록)
+        // 1. AR 생성 및 저장
         final REFProductRecognition recognition = recognitionRepository.save(
                 REFProductRecognition.create(
                         command.inputText(),
@@ -48,13 +48,13 @@ public class REFProductRecognitionAppService {
         REFCachedPipelineResult pipelineResult = pipelineCacheService
                 .getCachedResult(command.inputText())
                 .map(cached -> {
-                    // 캐시 히트: AR 상태만 업데이트
                     applyResultToRecognition(recognition, cached);
                     return cached;
                 })
                 .orElseGet(() -> {
-                    // 캐시 미스: 파이프라인 실행 + 캐시 저장
                     REFRecognitionContext ctx = executePipeline(command.inputText(), recognition);
+                    recognition.applyParsedResult(ctx.getParsedProductName());
+
                     REFCachedPipelineResult result = REFCachedPipelineResult.from(ctx);
                     pipelineCacheService.cacheResult(command.inputText(), result);
                     return result;
@@ -69,7 +69,6 @@ public class REFProductRecognitionAppService {
 
     /**
      * 파이프라인을 조립하고 실행한다.
-     * 파이프라인 내부에서 AR 상태가 직접 업데이트된다.
      */
     private REFRecognitionContext executePipeline(String inputText,
                                                   REFProductRecognition recognition) {
@@ -85,13 +84,12 @@ public class REFProductRecognitionAppService {
     }
 
     /**
-     * 캐시 히트 시, 캐시된 결과를 기반으로 AR 상태를 업데이트한다.
-     * 파이프라인을 실행하지 않으므로 직접 AR 메서드를 호출해야 한다.
+     * 캐시 히트 시 AR 상태 업데이트.
      */
     private void applyResultToRecognition(REFProductRecognition recognition,
                                           REFCachedPipelineResult result) {
         if (result.rejected()) {
-            recognition.rejectAsNonFood();
+            recognition.rejectAsNonFood(result.rejectedReason());
         } else if (result.isNoMatch()) {
             recognition.failToMatch();
         } else {
@@ -107,8 +105,29 @@ public class REFProductRecognitionAppService {
                         log.warn("알 수 없는 completedBy: {}", result.completedBy());
             }
         }
+
+        recognition.applyParsedResult(rebuildParsedInfoFromCache(result));
     }
 
+    /**
+     * 캐시된 결과에서 REFParsedProductInformation을 복원합니다.
+     * REFCachedPipelineResult에 이미 파싱 결과 필드가 보관되어 있으므로
+     * 역변환하여 AR에 전달합니다.
+     */
+    private REFParsedProductInformation rebuildParsedInfoFromCache(REFCachedPipelineResult cached) {
+        return com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation.builder()
+                .originalText(cached.originalText())
+                .refinedText(cached.refinedText())
+                .brandName(cached.brandName())
+                .quantity(cached.quantity())
+                .volume(cached.volume())
+                .volumeUnit(cached.volumeUnit())
+                .build();
+    }
+
+    /**
+     * 이벤트 발행
+     */
     private void publishCompletionEvent(REFProductRecognition recognition,
                                         REFCachedPipelineResult result) {
         eventPublisher.publishEvent(new REFRecognitionCompletedEvent(

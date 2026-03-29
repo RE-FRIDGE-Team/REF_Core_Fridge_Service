@@ -1,6 +1,5 @@
 package com.refridge.core_server.product_recognition.domain.ar;
 
-
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.product_recognition.domain.vo.*;
 import com.refridge.core_server.product_recognition.infra.converter.REFProductRecognitionStatusConverter;
@@ -49,6 +48,12 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
     @Embedded
     private REFProductRecognitionOutput recognitionOutput;
 
+    @Embedded
+    private REFParsedProductResult parsedResult;
+
+    @Embedded
+    private REFRejectionDetail rejectionDetail;
+
     /* JPA 생성 시점 콜백 - createdAt 자동 업데이트 */
     @PrePersist
     protected void onCreate() {
@@ -74,60 +79,74 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
         this.status = REFProductRecognitionStatus.PENDING;
         this.processingPath = REFRecognitionProcessingPath.WAITING;
         this.recognitionOutput = null;
+        // ──────────────────────────────────────────────────────
+        // [신규 추가] 생성 시점에는 파싱 전이므로 empty
+        // ──────────────────────────────────────────────────────
+        this.parsedResult = REFParsedProductResult.empty();
+        // [신규 추가] 생성 시점에는 반려 전이므로 empty
+        this.rejectionDetail = REFRejectionDetail.empty();
 
         LocalDateTime now = LocalDateTime.now();
         this.entityTimeMetaData = new REFEntityTimeMetaData(now, now);
     }
 
-    /* FACTORY METHOD */
+    /* FACTORY METHOD — 변경 없음 */
     public static REFProductRecognition create(String inputText, String requesterId){
         return new REFProductRecognition(inputText, requesterId);
     }
 
-    /* BUSINESS LOGIC : 비식재료로 판단 후 인식 반려할 수 있다. */
-    public void rejectAsNonFood(){
+    // ──────────────────────────────────────────────────────────────
+    // [신규 추가] 파싱 결과 저장 메서드
+    // 파이프라인에서 ProductNameParsingHandler 실행 후,
+    // Context의 파싱 결과를 AR에 옮길 때 사용합니다.
+    // ──────────────────────────────────────────────────────────────
+
+    /**
+     * 파이프라인의 파싱 결과를 AR에 저장합니다.
+     * <p>
+     * 호출 시점: 파이프라인 실행 완료 후, Application Service에서
+     * Context의 parsedProductName을 AR에 옮길 때.
+     *
+     * @param parsed 파이프라인 실행 중 생성된 파싱 결과 (null 가능)
+     */
+    public void applyParsedResult(REFParsedProductInformation parsed) {
+        this.parsedResult = REFParsedProductResult.from(parsed);
+    }
+
+    public void rejectAsNonFood(String matchedKeyword){
         this.status = REFProductRecognitionStatus.REJECTED;
         this.processingPath = REFRecognitionProcessingPath.EXCLUSION;
+        this.rejectionDetail = REFRejectionDetail.of(matchedKeyword);
         this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
         this.completedAt = LocalDateTime.now();
     }
 
-    /* BUSINESS LOGIC : 식재료 사전 매칭을 통해 결과 도출이 될 수 있다. */
     public void completeWithGroceryItemDictionaryMatch(REFProductRecognitionOutput output) {
         modifySuccessfulOutput(output);
         this.processingPath = REFRecognitionProcessingPath.GROCERY_ITEM_DICT;
-        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 
-    /* BUSINESS LOGIC : 제품명 색인을 통해 결과 도출이 될 수 있다. */
     public void completeWithProductIndexMatch(REFProductRecognitionOutput output){
         modifySuccessfulOutput(output);
         this.processingPath = REFRecognitionProcessingPath.PRODUCT_INDEX;
-        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 
-    /* BUSINESS LOGIC : 머신러닝 모델을 통해 결과 도출이 될 수 있다. */
     public void completeWithMLPrediction(REFProductRecognitionOutput output){
         modifySuccessfulOutput(output);
         this.processingPath = REFRecognitionProcessingPath.ML_MODEL;
-        // TODO : ML 모델은 GroceryItem에 해당 원재료가 있어야만 처리가 되는가 대해 어떻게 할지 고민해봐야 함.
-        // TODO : 만약 없다면, GroceryItem도 새로 생성하는 로직이 필요할 수도?
-        // registerEvent(new RecognitionCompletedEvent(this.id, this.processingPath, this.result));
     }
 
-    /* BUSINESS LOGIC : 머신러닝 모델까지 갔는데, 식재료가 아니라고 판단한 경우 */
     public void failToMatch(){
         this.status = REFProductRecognitionStatus.NO_MATCH;
         this.entityTimeMetaData = this.entityTimeMetaData.updateModifiedAt(LocalDateTime.now());
         this.completedAt = LocalDateTime.now();
     }
 
-    /* BUSINESS LOGIC : 인식 과정이 모두 완료된 경우에만 피드백을 받을 수 있다. */
     public boolean canReceiveFeedback() {
-        return this.status == REFProductRecognitionStatus.COMPLETED;
+        return this.status == REFProductRecognitionStatus.COMPLETED
+                || this.status == REFProductRecognitionStatus.REJECTED;
     }
 
-    /* INTERNAL METHOD : 성공적으로 Output이 도출된 경우 시간 관련 필드를 변경하고 output을 재설정한다. */
     private void modifySuccessfulOutput(REFProductRecognitionOutput output){
         this.recognitionOutput = output;
         this.status = REFProductRecognitionStatus.COMPLETED;
@@ -141,5 +160,21 @@ public class REFProductRecognition extends AbstractAggregateRoot<REFProductRecog
 
     public UUID getRequesterIdValue(){
         return this.requesterId.getId();
+    }
+
+    /** 인식 매칭 결과 (groceryItemId, groceryItemName, categoryPath, imageUrl) */
+    public REFProductRecognitionOutput getRecognitionOutput() {
+        return this.recognitionOutput;
+    }
+
+    /** 파싱 결과 (refinedProductName, brandName, quantity, volume, volumeUnit) */
+    public REFParsedProductResult getParsedResult() {
+        return this.parsedResult;
+    }
+
+    // [신규 추가] 반려 사유 (매칭된 비식재료 키워드)
+    /** 비식재료 반려 사유 — 반려되지 않았으면 empty */
+    public REFRejectionDetail getRejectionDetail() {
+        return this.rejectionDetail;
     }
 }
