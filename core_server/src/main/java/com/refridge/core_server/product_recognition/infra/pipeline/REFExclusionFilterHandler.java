@@ -21,8 +21,8 @@ public class REFExclusionFilterHandler implements REFRecognitionHandler {
                 .peek(keyword -> log.info("비식재료 필터 매칭. input='{}', matched='{}'",
                         context.getRawInput(), keyword))
                 .findFirst()
-                .ifPresent(ignored -> {
-                    context.getRecognition().rejectAsNonFood();
+                .ifPresent(matchedKeyword -> {
+                    context.getRecognition().rejectAsNonFood(matchedKeyword);
                     context.reject(handlerName());
                 });
     }
@@ -31,5 +31,4 @@ public class REFExclusionFilterHandler implements REFRecognitionHandler {
     public String handlerName() {
         return "ExclusionFilter";
     }
-
 }

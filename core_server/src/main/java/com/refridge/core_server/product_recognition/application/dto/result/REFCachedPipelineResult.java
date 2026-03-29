@@ -20,6 +20,7 @@ public record REFCachedPipelineResult(
         // 파이프라인 메타데이터
         String completedBy,
         boolean rejected,
+        String rejectedReason,
 
         // 파싱 정보
         String originalText,
@@ -45,6 +46,7 @@ public record REFCachedPipelineResult(
                 .completedBy(ctx.getCompletedBy())
                 .rejected(ctx.isCompleted() && output == null
                         && !"MLPrediction:NO_MATCH".equals(ctx.getCompletedBy()))
+                .rejectedReason(ctx.getRecognition().getRejectionDetail().getMatchedKeyword())
                 .originalText(parsed != null ? parsed.originalText() : null)
                 .refinedText(parsed != null ? parsed.refinedText() : null)
                 .brandName(parsed != null ? parsed.brandName() : null)
