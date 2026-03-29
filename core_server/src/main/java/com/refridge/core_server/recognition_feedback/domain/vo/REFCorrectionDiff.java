@@ -44,22 +44,34 @@ public class REFCorrectionDiff {
     @Column(name = "diff_quantity_volume")
     private boolean quantityOrVolumeChanged;
 
+    /** 비식재료로 반려되었으나 사용자가 식재료로 수정한 경우 */
+    @Column(name = "diff_rejected_but_food")
+    private boolean rejectedButFood;
+
     /**
      * 원본 스냅샷과 사용자 수정 데이터를 비교하여 diff를 계산합니다.
      * <p>
      * 수정 데이터의 필드가 null이면 "변경하지 않음"으로 간주합니다.
-     * 즉, null은 "원본과 동일" 입니다.
+     * 즉, null은 "원본과 동일" 시맨틱입니다.
+     * <p>
+     * 원본이 비식재료 반려건({@code rejected == true})이고
+     * 사용자가 식재료명을 입력했으면 {@code rejectedButFood = true}로 마킹합니다.
      */
     public static REFCorrectionDiff calculate(
             REFOriginalRecognitionSnapshot original,
             REFUserCorrectionData correction) {
+
+        boolean rejectedButFood = original.isRejected()
+                && correction.getCorrectedGroceryItemName() != null
+                && !correction.getCorrectedGroceryItemName().isBlank();
 
         return new REFCorrectionDiff(
                 isChanged(original.getProductName(), correction.getCorrectedProductName()),
                 isChanged(original.getGroceryItemName(), correction.getCorrectedGroceryItemName()),
                 isChanged(original.getCategoryPath(), correction.getCorrectedCategoryPath()),
                 isChanged(original.getBrandName(), correction.getCorrectedBrandName()),
-                isQuantityOrVolumeChanged(original, correction)
+                isQuantityOrVolumeChanged(original, correction),
+                rejectedButFood
         );
     }
 
@@ -75,6 +87,7 @@ public class REFCorrectionDiff {
         if (categoryChanged)          changed.add(REFCorrectionType.CATEGORY);
         if (brandChanged)             changed.add(REFCorrectionType.BRAND);
         if (quantityOrVolumeChanged)  changed.add(REFCorrectionType.QUANTITY_VOLUME);
+        if (rejectedButFood)          changed.add(REFCorrectionType.REJECTED_BUT_FOOD);
 
         return changed;
     }
@@ -86,10 +99,8 @@ public class REFCorrectionDiff {
     public boolean hasNoChanges() {
         return !productNameChanged && !groceryItemChanged
                 && !categoryChanged && !brandChanged
-                && !quantityOrVolumeChanged;
+                && !quantityOrVolumeChanged && !rejectedButFood;
     }
-
-    /* ---- Internal ---- */
 
     /**
      * correctedValue가 null이면 "수정하지 않음" → 변경 없음.
