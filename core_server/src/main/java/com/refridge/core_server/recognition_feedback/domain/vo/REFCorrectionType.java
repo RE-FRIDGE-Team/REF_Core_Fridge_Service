@@ -27,7 +27,10 @@ public enum REFCorrectionType {
     BRAND("브랜드 변경"),
 
     /** 수량 또는 용량이 변경됨 → 파서 정규식 보완 후보 */
-    QUANTITY_VOLUME("수량/용량 변경");
+    QUANTITY_VOLUME("수량/용량 변경"),
+
+    /** 비식재료로 반려되었으나 사용자가 식재료로 수정함 → 비식재료 사전 수정 후보 */
+    REJECTED_BUT_FOOD("비식재료 반려 → 식재료 수정");
 
     private final String description;
 }

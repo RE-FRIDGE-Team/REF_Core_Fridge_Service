@@ -18,6 +18,11 @@ import lombok.NoArgsConstructor;
  *   <li>파서 성능 분석: 브랜드 추출 정확도, 정제 품질 추적</li>
  *   <li>이벤트 발행: 완료 이벤트에 파싱 결과 포함</li>
  * </ul>
+ *
+ * <h3>⚠️ 신규 추가 필드입니다</h3>
+ * 기존 {@code REFProductRecognition} 테이블에 아래 컬럼들이 추가됩니다:
+ * {@code parsed_product_name}, {@code parsed_brand_name},
+ * {@code parsed_quantity}, {@code parsed_volume}, {@code parsed_volume_unit}
  */
 @Getter
 @Embeddable
