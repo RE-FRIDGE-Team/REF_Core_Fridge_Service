@@ -3,6 +3,8 @@ package com.refridge.core_server.product_recognition.application.dto.result;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 
+import java.util.List;
+
 public record REFRecognitionResultResponse(
         boolean success,
         boolean rejected,           // 비식재료 반려 여부
@@ -14,7 +16,9 @@ public record REFRecognitionResultResponse(
         Long groceryItemId,
         String groceryItemName,
         String categoryPath,
-        String imageUrl
+        String imageUrl,
+        List<REFCorrectionSuggestion> correctionSuggestions
+
 ) {
 
     public static REFRecognitionResultResponse from(REFRecognitionContext ctx) {
@@ -33,7 +37,8 @@ public record REFRecognitionResultResponse(
                 output != null ? output.getGroceryItemId() : null,
                 output != null ? output.getGroceryItemName() : null,
                 output != null ? output.getCategoryPath() : null,
-                output != null ? output.getImageUrl() : null
+                output != null ? output.getImageUrl() : null,
+                List.of()
         );
     }
 
@@ -52,15 +57,38 @@ public record REFRecognitionResultResponse(
                 cached.groceryItemId(),
                 cached.groceryItemName(),
                 cached.categoryPath(),
-                cached.imageUrl()
+                cached.imageUrl(),
+                List.of()
         );
+    }
+
+    public REFRecognitionResultResponse withCorrectionSuggestions(
+            List<REFCorrectionSuggestion> suggestions) {
+        return new REFRecognitionResultResponse(
+                this.success,
+                this.rejected,
+                this.completedBy,
+                this.refinedProductName,
+                this.brandName,
+                this.quantity,
+                this.volume,
+                this.groceryItemId,
+                this.groceryItemName,
+                this.categoryPath,
+                this.imageUrl,
+                suggestions
+        );
+    }
+
+    public boolean hasCorrectionSuggestions() {
+        return correctionSuggestions != null && !correctionSuggestions.isEmpty();
     }
 
     public static REFRecognitionResultResponse failure(String rawInput, String reason) {
         return new REFRecognitionResultResponse(
                 false, false, "FAILED:" + reason,
                 rawInput, null, null, null,
-                null, null, null, null
+                null, null, null, null, List.of()
         );
     }
 }

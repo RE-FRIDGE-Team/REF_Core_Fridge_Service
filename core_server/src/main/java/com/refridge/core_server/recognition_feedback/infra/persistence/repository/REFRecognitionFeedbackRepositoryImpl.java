@@ -8,6 +8,7 @@ import com.refridge.core_server.recognition_feedback.domain.REFRecognitionFeedba
 import com.refridge.core_server.recognition_feedback.domain.vo.REFFeedbackStatus;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFRecognitionFeedbackId;
 import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackAggregationDto;
+import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackCorrectionHistoryDto;
 import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackDetailDto;
 import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackSummaryDto;
 import lombok.RequiredArgsConstructor;
@@ -205,5 +206,45 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
         if (statusCode == null || statusCode.isBlank()) return null;
         REFFeedbackStatus status = REFFeedbackStatus.fromDbCode(statusCode);
         return rEFRecognitionFeedback.status.eq(status);
+    }
+
+
+    /**
+     * 동일 원본 제품명에 대해 CORRECTED 상태인 피드백들의 수정 내용을 집계합니다.
+     * <p>
+     * 동일 수정 조합(제품명+식재료+브랜드+카테고리)을 GROUP BY하여
+     * occurrenceCount(빈도)를 제공합니다. 빈도 높은 순 정렬.
+     * <p>
+     * 실행 쿼리: 1개 — GROUP BY + COUNT + ORDER BY DESC + LIMIT.
+     */
+    @Override
+    public List<REFFeedbackCorrectionHistoryDto> findCorrectionHistoryByProductName(
+            String originalProductName, int limit) {
+
+        if (originalProductName == null || originalProductName.isBlank()) return List.of();
+
+        return queryFactory
+                .select(Projections.constructor(
+                        REFFeedbackCorrectionHistoryDto.class,
+                        rEFRecognitionFeedback.userCorrection.correctedProductName,
+                        rEFRecognitionFeedback.userCorrection.correctedGroceryItemName,
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName,
+                        rEFRecognitionFeedback.userCorrection.correctedCategoryPath,
+                        rEFRecognitionFeedback.id.value.count()
+                ))
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.productName.eq(originalProductName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED)
+                )
+                .groupBy(
+                        rEFRecognitionFeedback.userCorrection.correctedProductName,
+                        rEFRecognitionFeedback.userCorrection.correctedGroceryItemName,
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName,
+                        rEFRecognitionFeedback.userCorrection.correctedCategoryPath
+                )
+                .orderBy(rEFRecognitionFeedback.id.value.count().desc())
+                .limit(limit)
+                .fetch();
     }
 }
