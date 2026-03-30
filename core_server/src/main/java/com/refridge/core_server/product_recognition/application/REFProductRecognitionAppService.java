@@ -2,15 +2,16 @@ package com.refridge.core_server.product_recognition.application;
 
 import com.refridge.core_server.product_recognition.application.dto.command.REFRecognitionRequestCommand;
 import com.refridge.core_server.product_recognition.application.dto.result.REFCachedPipelineResult;
+import com.refridge.core_server.product_recognition.application.dto.result.REFCorrectionSuggestion;
 import com.refridge.core_server.product_recognition.application.dto.result.REFRecognitionResultResponse;
 import com.refridge.core_server.product_recognition.domain.ar.REFProductRecognition;
 import com.refridge.core_server.product_recognition.domain.event.REFRecognitionCompletedEvent;
 import com.refridge.core_server.product_recognition.domain.pipeline.REFRecognitionContext;
 import com.refridge.core_server.product_recognition.domain.REFProductRecognitionRepository;
 import com.refridge.core_server.product_recognition.domain.service.REFRecognitionPipeline;
-import com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation;
 import com.refridge.core_server.product_recognition.domain.vo.REFProductRecognitionOutput;
 import com.refridge.core_server.product_recognition.infra.pipeline.*;
+import com.refridge.core_server.recognition_feedback.domain.port.REFCorrectionHistoryQueryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -34,6 +35,12 @@ public class REFProductRecognitionAppService {
     private final REFProductIndexSearchHandler productIndexSearchHandler;
     private final REFMLPredictionHandler mlPredictionHandler;
 
+    // [신규 추가] 피드백 BC의 수정 이력 조회 포트
+    private final REFCorrectionHistoryQueryPort correctionHistoryQueryPort;
+
+    /** 타 사용자 수정 이력 최대 조회 건수 */
+    private static final int MAX_SUGGESTION_COUNT = 3;
+
     @Transactional
     public REFRecognitionResultResponse recognize(REFRecognitionRequestCommand command) {
         // 1. AR 생성 및 저장
@@ -53,6 +60,10 @@ public class REFProductRecognitionAppService {
                 })
                 .orElseGet(() -> {
                     REFRecognitionContext ctx = executePipeline(command.inputText(), recognition);
+
+                    // ──────────────────────────────────────────────────────
+                    // [신규 추가] 파이프라인 완료 후 Context의 파싱 결과를 AR에 저장
+                    // ──────────────────────────────────────────────────────
                     recognition.applyParsedResult(ctx.getParsedProductName());
 
                     REFCachedPipelineResult result = REFCachedPipelineResult.from(ctx);
@@ -60,15 +71,30 @@ public class REFProductRecognitionAppService {
                     return result;
                 });
 
-        // 3. 이벤트 발행
+        // 3. 이벤트 발행 — 변경 없음
         publishCompletionEvent(recognition, pipelineResult);
 
         // 4. 결과 반환
-        return REFRecognitionResultResponse.from(pipelineResult);
+        REFRecognitionResultResponse response = REFRecognitionResultResponse.from(pipelineResult);
+
+        // ──────────────────────────────────────────────────────────────
+        // [신규 추가] 타 사용자 수정 이력 조회 → 응답에 추천 정보 포함
+        // 비식재료 반려건이 아닌 경우에만 조회 (반려건은 추천 대상 아님)
+        // ──────────────────────────────────────────────────────────────
+        if (!pipelineResult.rejected() && pipelineResult.refinedText() != null) {
+            List<REFCorrectionSuggestion> suggestions = lookupCorrectionSuggestions(
+                    pipelineResult.refinedText());
+
+            if (!suggestions.isEmpty()) {
+                response = response.withCorrectionSuggestions(suggestions);
+            }
+        }
+
+        return response;
     }
 
     /**
-     * 파이프라인을 조립하고 실행한다.
+     * 파이프라인을 조립하고 실행한다. — 변경 없음
      */
     private REFRecognitionContext executePipeline(String inputText,
                                                   REFProductRecognition recognition) {
@@ -84,7 +110,7 @@ public class REFProductRecognitionAppService {
     }
 
     /**
-     * 캐시 히트 시 AR 상태 업데이트.
+     * 캐시 히트 시 AR 상태 업데이트. — 변경 없음
      */
     private void applyResultToRecognition(REFProductRecognition recognition,
                                           REFCachedPipelineResult result) {
@@ -105,16 +131,14 @@ public class REFProductRecognitionAppService {
                         log.warn("알 수 없는 completedBy: {}", result.completedBy());
             }
         }
-
         recognition.applyParsedResult(rebuildParsedInfoFromCache(result));
     }
 
     /**
-     * 캐시된 결과에서 REFParsedProductInformation을 복원합니다.
-     * REFCachedPipelineResult에 이미 파싱 결과 필드가 보관되어 있으므로
-     * 역변환하여 AR에 전달합니다.
+     * [신규 추가] 캐시된 결과에서 REFParsedProductInformation을 복원합니다.
      */
-    private REFParsedProductInformation rebuildParsedInfoFromCache(REFCachedPipelineResult cached) {
+    private com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation
+    rebuildParsedInfoFromCache(REFCachedPipelineResult cached) {
         return com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation.builder()
                 .originalText(cached.originalText())
                 .refinedText(cached.refinedText())
@@ -125,8 +149,33 @@ public class REFProductRecognitionAppService {
                 .build();
     }
 
+    // ──────────────────────────────────────────────────────────────
+    // [신규 추가] 타 사용자 수정 이력 조회
+    // ──────────────────────────────────────────────────────────────
+
     /**
-     * 이벤트 발행
+     * 피드백 BC에서 동일 원본 제품명에 대한 수정 이력을 조회하여
+     * 인식 BC 언어의 {@link REFCorrectionSuggestion} 리스트로 변환합니다.
+     *
+     * @param originalProductName 파이프라인이 산출한 정제 제품명
+     * @return 수정 추천 목록 (빈도 높은 순, 없으면 빈 리스트)
+     */
+    private List<REFCorrectionSuggestion> lookupCorrectionSuggestions(String originalProductName) {
+        return correctionHistoryQueryPort
+                .findByProductName(originalProductName, MAX_SUGGESTION_COUNT)
+                .stream()
+                .map(dto -> REFCorrectionSuggestion.builder()
+                        .correctedProductName(dto.correctedProductName())
+                        .correctedGroceryItemName(dto.correctedGroceryItemName())
+                        .correctedBrandName(dto.correctedBrandName())
+                        .correctedCategoryPath(dto.correctedCategoryPath())
+                        .occurrenceCount(dto.occurrenceCount())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * 이벤트 발행 — 변경 없음
      */
     private void publishCompletionEvent(REFProductRecognition recognition,
                                         REFCachedPipelineResult result) {
