@@ -19,8 +19,13 @@ import com.refridge.core_server.recognition_feedback.domain.vo.REFRecognitionRef
  * @param purchasePrice         사용자가 입력한 구매 가격 (nullable)
  */
 public record REFPositiveFeedbackEvent(
+        // 피드백 아이디
         REFRecognitionFeedbackId feedbackId,
+
+        // 인식 아이디 참조 객체
         REFRecognitionReference recognitionReference,
+
+        // 인식 시점의 결과 스냅샷 (변경 없음)
         REFOriginalRecognitionSnapshot snapshot,
         Long purchasePrice
 ) {
