@@ -35,23 +35,15 @@ public class REFProductRecognitionAppService {
     private final REFProductIndexSearchHandler productIndexSearchHandler;
     private final REFMLPredictionHandler mlPredictionHandler;
 
-    // [신규 추가] 피드백 BC의 수정 이력 조회 포트
     private final REFCorrectionHistoryQueryPort correctionHistoryQueryPort;
 
-    /** 타 사용자 수정 이력 최대 조회 건수 */
     private static final int MAX_SUGGESTION_COUNT = 3;
 
     @Transactional
     public REFRecognitionResultResponse recognize(REFRecognitionRequestCommand command) {
-        // 1. AR 생성 및 저장
         final REFProductRecognition recognition = recognitionRepository.save(
-                REFProductRecognition.create(
-                        command.inputText(),
-                        command.requesterId()
-                )
-        );
+                REFProductRecognition.create(command.inputText(), command.requesterId()));
 
-        // 2. 캐시 확인 → 히트면 파이프라인 스킵, 미스면 실행
         REFCachedPipelineResult pipelineResult = pipelineCacheService
                 .getCachedResult(command.inputText())
                 .map(cached -> {
@@ -60,30 +52,25 @@ public class REFProductRecognitionAppService {
                 })
                 .orElseGet(() -> {
                     REFRecognitionContext ctx = executePipeline(command.inputText(), recognition);
-
-                    // ──────────────────────────────────────────────────────
-                    // [신규 추가] 파이프라인 완료 후 Context의 파싱 결과를 AR에 저장
-                    // ──────────────────────────────────────────────────────
                     recognition.applyParsedResult(ctx.getParsedProductName());
-
                     REFCachedPipelineResult result = REFCachedPipelineResult.from(ctx);
                     pipelineCacheService.cacheResult(command.inputText(), result);
                     return result;
                 });
 
-        // 3. 이벤트 발행 — 변경 없음
         publishCompletionEvent(recognition, pipelineResult);
 
-        // 4. 결과 반환
         REFRecognitionResultResponse response = REFRecognitionResultResponse.from(pipelineResult);
 
-        // ──────────────────────────────────────────────────────────────
-        // [신규 추가] 타 사용자 수정 이력 조회 → 응답에 추천 정보 포함
-        // 비식재료 반려건이 아닌 경우에만 조회 (반려건은 추천 대상 아님)
-        // ──────────────────────────────────────────────────────────────
-        if (!pipelineResult.rejected() && pipelineResult.refinedText() != null) {
-            List<REFCorrectionSuggestion> suggestions = lookupCorrectionSuggestions(
-                    pipelineResult.refinedText());
+        // alias 교체가 적용된 경우 correctionSuggestions 조회 생략
+        // 이유: alias 확정 = 인식 결과가 이미 검증된 올바른 값
+        //       사용자에게 "다른 사람이 이렇게 수정했어요"를 보여주면 혼란을 유발
+        if (!pipelineResult.rejected()
+                && !pipelineResult.aliasApplied()
+                && pipelineResult.refinedText() != null) {
+
+            List<REFCorrectionSuggestion> suggestions =
+                    lookupCorrectionSuggestions(pipelineResult.refinedText());
 
             if (!suggestions.isEmpty()) {
                 response = response.withCorrectionSuggestions(suggestions);
@@ -93,9 +80,6 @@ public class REFProductRecognitionAppService {
         return response;
     }
 
-    /**
-     * 파이프라인을 조립하고 실행한다. — 변경 없음
-     */
     private REFRecognitionContext executePipeline(String inputText,
                                                   REFProductRecognition recognition) {
         REFRecognitionPipeline pipeline = new REFRecognitionPipeline(List.of(
@@ -105,13 +89,9 @@ public class REFProductRecognitionAppService {
                 productIndexSearchHandler,
                 mlPredictionHandler
         ));
-
         return pipeline.execute(new REFRecognitionContext(inputText, recognition));
     }
 
-    /**
-     * 캐시 히트 시 AR 상태 업데이트. — 변경 없음
-     */
     private void applyResultToRecognition(REFProductRecognition recognition,
                                           REFCachedPipelineResult result) {
         if (result.rejected()) {
@@ -134,9 +114,6 @@ public class REFProductRecognitionAppService {
         recognition.applyParsedResult(rebuildParsedInfoFromCache(result));
     }
 
-    /**
-     * [신규 추가] 캐시된 결과에서 REFParsedProductInformation을 복원합니다.
-     */
     private com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation
     rebuildParsedInfoFromCache(REFCachedPipelineResult cached) {
         return com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation.builder()
@@ -149,17 +126,6 @@ public class REFProductRecognitionAppService {
                 .build();
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // [신규 추가] 타 사용자 수정 이력 조회
-    // ──────────────────────────────────────────────────────────────
-
-    /**
-     * 피드백 BC에서 동일 원본 제품명에 대한 수정 이력을 조회하여
-     * 인식 BC 언어의 {@link REFCorrectionSuggestion} 리스트로 변환합니다.
-     *
-     * @param originalProductName 파이프라인이 산출한 정제 제품명
-     * @return 수정 추천 목록 (빈도 높은 순, 없으면 빈 리스트)
-     */
     private List<REFCorrectionSuggestion> lookupCorrectionSuggestions(String originalProductName) {
         return correctionHistoryQueryPort
                 .findByProductName(originalProductName, MAX_SUGGESTION_COUNT)
@@ -174,9 +140,6 @@ public class REFProductRecognitionAppService {
                 .toList();
     }
 
-    /**
-     * 이벤트 발행 — 변경 없음
-     */
     private void publishCompletionEvent(REFProductRecognition recognition,
                                         REFCachedPipelineResult result) {
         eventPublisher.publishEvent(new REFRecognitionCompletedEvent(
