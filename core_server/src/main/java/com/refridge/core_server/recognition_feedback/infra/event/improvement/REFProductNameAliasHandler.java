@@ -1,5 +1,6 @@
 package com.refridge.core_server.recognition_feedback.infra.event.improvement;
 
+import com.refridge.core_server.product_alias.application.REFAliasConfirmationService;
 import com.refridge.core_server.recognition_feedback.domain.event.REFNegativeFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFCorrectionType;
 import lombok.RequiredArgsConstructor;
@@ -9,19 +10,21 @@ import org.springframework.stereotype.Component;
 
 /**
  * 제품명이 변경된 부정 피드백을 처리합니다.
- * <p>
- * 처리 로직:
- * <ol>
- *   <li>{@code 원본 정제명 → 사용자 수정명} 매핑을 Redis Hash에 저장</li>
- *   <li>동일 매핑이 K회 누적되면 제품명 alias로 확정</li>
- *   <li>확정된 alias는 인식 파이프라인의 파서 이후 변환 단계에서 활용 가능</li>
- * </ol>
- * <p>
- * Redis 구조:<pre>
- *   Hash: feedback:product-alias:{originalProductName}
- *   Field: {correctedProductName}
- *   Value: 누적 횟수
- * </pre>
+ *
+ * 처리 흐름:
+ *   1. Redis Hash에 "원본 -> 수정본" 선택 횟수 누적
+ *   2. 전체 선택 횟수(파이프라인 선택 포함) 대비 비율 계산
+ *   3. 확정 조건 충족 시 REFAliasConfirmationService.confirmAlias() 호출
+ *      -> DB CONFIRMED 저장 + Redis alias:confirmed Hash 캐싱
+ *
+ * Redis 구조:
+ *   Hash Key : feedback:product-alias:{originalName}
+ *   Field    : {correctedName}   (수정본별 선택 횟수)
+ *   Field    : __total__         (전체 선택 횟수 - 파이프라인 포함)
+ *
+ * 확정 조건 (REFAliasConfirmationService):
+ *   수정본 선택 횟수 >= MIN_ALIAS_COUNT(10)
+ *   AND 수정본 선택 비율 >= MIN_ALIAS_RATIO(0.7)
  */
 @Slf4j
 @Component
@@ -29,8 +32,12 @@ import org.springframework.stereotype.Component;
 public class REFProductNameAliasHandler implements REFImprovementActionHandler {
 
     private final StringRedisTemplate redisTemplate;
+    private final REFAliasConfirmationService aliasConfirmationService;
 
-    private static final String ALIAS_KEY_PREFIX = "feedback:product-alias:";
+    private static final String ALIAS_CANDIDATE_PREFIX = "feedback:product-alias:";
+
+    /** 전체 선택 횟수를 저장하는 Hash field 이름 */
+    private static final String TOTAL_FIELD = "__total__";
 
     @Override
     public REFCorrectionType supportedType() {
@@ -45,20 +52,31 @@ public class REFProductNameAliasHandler implements REFImprovementActionHandler {
         if (originalName == null || correctedName == null) return;
         if (originalName.equals(correctedName)) return;
 
-        // TODO : Redis에 해당 키로 횟수를 늘림, 해당 originalName에 대해 사용자가 이전과 동일한 인식을
-        //  추정한 경우, 사용자에게 original vs corrected 선택지를 보여주고,
-        //  corrected가 선택된 경우에 계속해서 횟수를 늘림. 카운트가 일정이상 늘어나면 redis로부터 신호를 받아
-        //  제품명 pipeline 사전을 새로 만들어 해당 사전을 앞단에 놓아 제품명 정제 결과를 alias로 변환하는 로직을 추가
-        //  해당 로직을 통해 추가적인 정규표현식 개발 없이도 제품명 인식 개선 효과를 기대할 수 있음.
-        String hashKey = ALIAS_KEY_PREFIX + originalName;
-        Long count = redisTemplate.opsForHash().increment(hashKey, correctedName, 1);
+        String hashKey = ALIAS_CANDIDATE_PREFIX + originalName;
 
-        log.info("[제품명 alias] 매핑 누적. '{}' → '{}', feedbackId={}",
-                originalName, correctedName, event.feedbackId().getValue());
+        // 수정본 선택 횟수 증가
+        Long occurrenceCount = redisTemplate.opsForHash()
+                .increment(hashKey, correctedName, 1);
 
-        // TODO : count 비교, 특정 threshold 이상이면 alias 확정 처리
-        //  (예: 별도의 Redis Set에 확정된 alias DB에 영구 저장, 그 전에 인식 파이프라인의 정제 제품명 alias 사전을 만들어야 함)
+        // 전체 선택 횟수 증가 (수정본 선택도 전체에 포함)
+        Long totalCount = redisTemplate.opsForHash()
+                .increment(hashKey, TOTAL_FIELD, 1);
 
+        if (occurrenceCount == null || totalCount == null) {
+            log.warn("[Alias 핸들러] Redis increment 실패. originalName='{}'", originalName);
+            return;
+        }
 
+        log.info("[Alias 핸들러] 매핑 누적. '{}' -> '{}', 횟수={}/{}, feedbackId={}",
+                originalName, correctedName, occurrenceCount, totalCount,
+                event.feedbackId().getValue());
+
+        // 확정 조건 검사
+        if (aliasConfirmationService.meetsConfirmationThreshold(occurrenceCount, totalCount)) {
+            aliasConfirmationService.confirmAlias(
+                    originalName, correctedName, occurrenceCount, totalCount);
+
+            log.info("[Alias 핸들러] alias 확정 완료. '{}' -> '{}'", originalName, correctedName);
+        }
     }
 }

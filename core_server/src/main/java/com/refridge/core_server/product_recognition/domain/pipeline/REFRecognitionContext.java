@@ -15,35 +15,33 @@ import lombok.Setter;
 @Getter
 public class REFRecognitionContext {
 
-    // 원본 입력 (불변)
     private final String rawInput;
     private final REFProductRecognition recognition;
 
-    // 파이프라인 실행 중 채워지는 필드
     @Setter
     private REFParsedProductInformation parsedProductName;
     private REFProductRecognitionOutput output;
     private boolean completed = false;
-    private String completedBy; // 어느 단계에서 완료됐는지 (디버깅/로깅용)
+    private String completedBy;
+
+    /**
+     * alias 교체 여부.
+     * true이면 refinedText가 alias로 교체된 상태입니다.
+     * correctionSuggestions 조회를 생략하는 데 사용됩니다.
+     */
+    private boolean aliasApplied = false;
 
     public REFRecognitionContext(String rawInput, REFProductRecognition recognition) {
         this.rawInput = rawInput;
         this.recognition = recognition;
     }
 
-    /**
-     * 파이프라인을 완료 상태로 마킹한다.
-     * 이후 핸들러들은 isCompleted()를 확인하고 처리를 건너뛴다.
-     */
     public void complete(REFProductRecognitionOutput output, String completedBy) {
         this.output = output;
         this.completed = true;
         this.completedBy = completedBy;
     }
 
-    /**
-     * 반려 (비식재료) 처리
-     */
     public void reject(String completedBy) {
         this.completed = true;
         this.completedBy = completedBy;
@@ -51,8 +49,13 @@ public class REFRecognitionContext {
     }
 
     /**
-     * 정제된 제품명 반환. 파싱 이전 단계에서 호출 시 원본 텍스트 반환.
+     * alias 교체가 적용되었음을 표시합니다.
+     * REFProductNameParsingHandler에서 alias 교체 후 호출합니다.
      */
+    public void markAliasApplied() {
+        this.aliasApplied = true;
+    }
+
     public String getEffectiveInput() {
         if (parsedProductName != null) {
             return parsedProductName.refinedText();
