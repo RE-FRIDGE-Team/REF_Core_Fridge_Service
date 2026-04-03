@@ -1,25 +1,25 @@
 package com.refridge.core_server.recognition_feedback.infra.event.improvement;
 
+import com.refridge.core_server.recognition_feedback.domain.REFRecognitionFeedbackRepository;
 import com.refridge.core_server.recognition_feedback.domain.event.REFNegativeFeedbackEvent;
-import com.refridge.core_server.recognition_feedback.domain.review.REFFeedbackReviewItem;
-import com.refridge.core_server.recognition_feedback.domain.review.REFFeedbackReviewItemRepository;
-import com.refridge.core_server.recognition_feedback.domain.review.REFReviewType;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFCorrectionType;
+import com.refridge.core_server.recognition_feedback.infra.brand.REFBrandDictionaryFlushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+
 /**
  * 브랜드명이 변경된 부정 피드백을 처리합니다.
- * <p>
- * 처리 로직:
- * <ol>
- *   <li>수정된 브랜드명에 대해 Redis 카운터 증가</li>
- *   <li>임계값 미도달 → 검수 큐에 적재 (중복이면 누적 카운트 증가)</li>
- *   <li>임계값 도달 → 검수 큐에 적재 (관리자가 최종 승인 시 사전에 추가)</li>
- * </ol>
- * 브랜드 사전은 잘못 추가하면 파싱에 영향을 주므로 자동 추가하지 않고 관리자 검수를 거칩니다.
+ *
+ * <h3>Redis 카운터 만료 후 복원 전략</h3>
+ * increment() 결과가 1이면 키가 새로 생성된 것 = TTL 만료 후 첫 접근.
+ * 이 경우 DB에서 실제 누적 횟수를 조회하여 Redis 카운터를 복원합니다.
+ * 이후 increment는 복원된 값 기준으로 정확하게 누적됩니다.
+ *
+ * Redis가 살아있는 경우에는 DB 조회 없이 카운터만 증가합니다.
  */
 @Slf4j
 @Component
@@ -27,9 +27,13 @@ import org.springframework.stereotype.Component;
 public class REFBrandImprovementHandler implements REFImprovementActionHandler {
 
     private final StringRedisTemplate redisTemplate;
-    private final REFFeedbackReviewItemRepository reviewItemRepository;
+    private final REFBrandDictionaryFlushService brandDictionaryFlushService;
+    private final REFRecognitionFeedbackRepository feedbackRepository;
 
-    private static final String COUNTER_KEY_PREFIX = "feedback:brand:";
+    private static final String BRAND_COUNTER_PREFIX = "feedback:brand:";
+    public static final int MIN_BRAND_COUNT = 2;
+    private static final int BATCH_SIZE = 20;
+    private static final Duration COUNTER_TTL = Duration.ofDays(30);
 
     @Override
     public REFCorrectionType supportedType() {
@@ -41,32 +45,45 @@ public class REFBrandImprovementHandler implements REFImprovementActionHandler {
         String correctedBrand = event.correction().getCorrectedBrandName();
         if (correctedBrand == null || correctedBrand.isBlank()) return;
 
-        // Redis 카운터 증가
-        String counterKey = COUNTER_KEY_PREFIX + correctedBrand;
-        redisTemplate.opsForValue().increment(counterKey);
+        String counterKey = BRAND_COUNTER_PREFIX + correctedBrand;
 
-        // 검수 큐에 적재 (중복이면 누적 카운트만 증가)
-        reviewItemRepository.findByReviewTypeAndTargetValue(REFReviewType.BRAND_ADDITION, correctedBrand)
-                .ifPresentOrElse(
-                        REFFeedbackReviewItem::incrementOccurrence,
-                        () -> reviewItemRepository.save(
-                                REFFeedbackReviewItem.create(
-                                        REFReviewType.BRAND_ADDITION,
-                                        correctedBrand,
-                                        buildContext(event),
-                                        event.feedbackId().getValue()
-                                )
-                        )
-                );
+        // ── Step 1: 카운터 증가 ───────────────────────────────────
+        Long count = redisTemplate.opsForValue().increment(counterKey);
+        if (count == null) {
+            log.warn("[브랜드 핸들러] Redis increment 실패. brand='{}'", correctedBrand);
+            return;
+        }
 
-        log.info("[브랜드 보강] 검수 큐 적재. brand='{}', feedbackId={}",
-                correctedBrand, event.feedbackId().getValue());
-    }
+        // ── Step 2: Redis miss 복원 ───────────────────────────────
+        // increment 결과가 1 = 키가 새로 생성됨 = TTL 만료 후 첫 접근
+        // DB에서 실제 누적 횟수 조회 후 Redis 복원
+        if (count == 1) {
+            long dbCount = feedbackRepository.countByCorrectBrandName(correctedBrand);
+            if (dbCount > 1) {
+                // SET으로 덮어쓰기 (이미 increment로 1이 세팅된 상태)
+                // dbCount가 실제 전체 횟수이므로 그대로 세팅
+                redisTemplate.opsForValue().set(counterKey, String.valueOf(dbCount));
+                count = dbCount;
+                log.info("[브랜드 핸들러] Redis 복원. brand='{}', dbCount={}", correctedBrand, dbCount);
+            }
+        }
 
-    private String buildContext(REFNegativeFeedbackEvent event) {
-        return String.format("원본제품명='%s', 원본브랜드='%s', completedBy='%s'",
-                event.snapshot().getProductName(),
-                event.snapshot().getBrandName(),
-                event.snapshot().getCompletedBy());
+        // ── Step 3: TTL 갱신 ──────────────────────────────────────
+        redisTemplate.expire(counterKey, COUNTER_TTL);
+
+        log.info("[브랜드 핸들러] brand='{}', count={}, feedbackId={}",
+                correctedBrand, count, event.feedbackId().getValue());
+
+        if (count < MIN_BRAND_COUNT) return;
+
+        // ── Step 4: PENDING 추가 ──────────────────────────────────
+        Long pendingSize = brandDictionaryFlushService.addToPending(correctedBrand);
+        log.info("[브랜드 핸들러] PENDING 추가. brand='{}', pendingSize={}", correctedBrand, pendingSize);
+
+        // ── Step 5: BATCH_SIZE 즉시 flush ─────────────────────────
+        if (pendingSize != null && pendingSize >= BATCH_SIZE) {
+            log.info("[브랜드 핸들러] BATCH_SIZE({}) 도달, 즉시 flush.", BATCH_SIZE);
+            brandDictionaryFlushService.flush();
+        }
     }
 }

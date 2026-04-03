@@ -14,35 +14,45 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Duration;
+
 /**
- * 긍정 피드백 이벤트를 구독하여 Product 자동 등록 조건을 판단합니다.
+ * <h3>긍정 피드백 구독 및 제품 등록 검증 핸들러</h3>
  *
- * <h3>처리 흐름</h3>
- * <pre>
- *   긍정 피드백 이벤트 수신
- *     ↓
- *   Redis REGISTERED 플래그 확인 → 있으면 즉시 리턴 (이미 등록됨)
- *     ↓
- *   Redis 카운터 increment → 현재 누적값 반환
- *     ↓
- *   카운터 < COUNTER_QUICK_FILTER → 리턴 (DB 조회 생략)
- *     ↓
- *   DB 집계 조회 → REFProductRegistrationPolicy.isMet() 검증
- *     ↓
- *   조건 충족 → REFProductFeedbackAggregationEvent 발행
- *     ↓
- *   Product BC 핸들러가 등록 + Redis REGISTERED 플래그 세팅
- * </pre>
+ * <p>
+ * {@code RE:FRIDGE}의 5단계 인식 파이프라인 결과를 사용자가 수정 없이 수락('냉장고에 추가')할 때
+ * 발생하는 긍정 피드백 이벤트를 처리합니다.
+ * </p>
  *
- * <h3>Redis 키 구조</h3>
- * <pre>
- *   feedback:positive:{productName}    → 긍정 카운터 (Long)
- *   feedback:registered:{productName}  → 등록 완료 플래그 ("1")
- * </pre>
+ * <blockquote>
+ * <b>TODO:</b> 향후 별도의 냉장고 도메인 서버 분리 및 이벤트 스트리밍 Kafka 도입을 검토합니다.
+ * </blockquote>
  *
- * <h3>COUNTER_QUICK_FILTER 주의사항</h3>
- * {@link REFProductRegistrationPolicy#MIN_POSITIVE}와 반드시 동일한 값이어야 합니다.
- * 두 값이 어긋나면 Redis 빠른 차단이 의미를 잃습니다.
+ * <h4>1. 카운터 기반 성능 최적화 (Fast-Filtering)</h4>
+ * <ul>
+ * <li><b>Redis 활용:</b> {@code feedback:positive:{productName}} 키를 통해 제품별 긍정 피드백 수를 관리합니다.</li>
+ * <li><b>Early Return:</b> 카운터가 {@link REFProductRegistrationPolicy#MIN_POSITIVE} 미만인 경우,
+ * DB 접근 없이 즉시 종료하여 시스템 부하를 최소화합니다.</li>
+ * <li><b>DB 집계:</b> 임계값 도달 시점에만 DB에서 정확한 집계를 수행하여 등록 조건을 최종 검증합니다.</li>
+ * </ul>
+ *
+ * <h4>2. 제품 등록 프로세스</h4>
+ * <p>
+ * 모든 검증 조건({@link REFProductRegistrationPolicy} 참고)이 충족되면,
+ * 정식 제품 등록을 위한 {@code REFProductFeedbackAggregationEvent}를 발행합니다.
+ * </p>
+ *
+ * <h4>3. Redis TTL 관리 정책</h4>
+ * <ul>
+ * <li><b>대상:</b> 별칭(Alias) 후보 Hash 데이터 ({@code feedback:product-alias:{name}})</li>
+ * <li><b>갱신:</b> 긍정 피드백 발생 시 해당 제품을 '활성 상태'로 간주하여 TTL을
+ * {@code CANDIDATE_TTL}(30일)로 자동 연장합니다.</li>
+ * </ul>
+ *
+ * @author 이승훈
+ * @see REFProductRegistrationPolicy
+ * @see REFProductFeedbackAggregationEvent
+ * @since 2026. 4. 3.
  */
 @Slf4j
 @Component
@@ -54,12 +64,17 @@ public class REFPositiveFeedbackAggregationHandler {
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
 
-    // ── Redis 키 프리픽스 ──────────────────────────────────────
     static final String POSITIVE_COUNTER_PREFIX = "feedback:positive:";
-    static final String REGISTERED_FLAG_PREFIX  = "feedback:registered:";
+    static final String REGISTERED_FLAG_PREFIX = "feedback:registered:";
+    private static final String ALIAS_CANDIDATE_PREFIX = "feedback:product-alias:";
 
-    // ── 카운터 빠른 차단 임계값 ────────────────────────────────
-    // REFProductRegistrationPolicy.MIN_POSITIVE 와 반드시 동일해야 합니다.
+    private static final String ALIAS_TOTAL_FIELD = "__total__";
+
+    /**
+     * alias 후보 Hash TTL — 30일간 활동 없으면 자동 만료
+     */
+    private static final Duration CANDIDATE_TTL = Duration.ofDays(30);
+
     private static final int COUNTER_QUICK_FILTER = REFProductRegistrationPolicy.MIN_POSITIVE;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -67,54 +82,46 @@ public class REFPositiveFeedbackAggregationHandler {
         REFOriginalRecognitionSnapshot snapshot = event.snapshot();
         String productName = snapshot.getProductName();
 
+        // * early return 조건: 제품명 누락/공백, 피드백 거절된 경우
         if (productName == null || productName.isBlank()) return;
-
-        // 비식재료 반려건의 자동 승인은 Product 등록 대상 아님
         if (snapshot.isRejected()) return;
 
-        // ── Step 1: REGISTERED 플래그 확인 ────────────────────
+        // Step 1: 이미 제품으로 등록된 경우 early return + alias __total__ +1 + TTL 갱신
+        // TODO : Product 등록 카운터 increment도 해야지
         if (isAlreadyRegistered(productName)) {
-            log.debug("[긍정 피드백 집계] 이미 등록된 제품, 스킵. productName='{}'", productName);
+            log.debug("[긍정 피드백] 이미 등록된 제품, 스킵. productName='{}'", productName);
+            incrementAliasTotalWithTtl(productName);
             return;
         }
 
-        // ── Step 2: Redis 카운터 increment ────────────────────
+        // Step 2: alias __total__ +1 + TTL 갱신
+        incrementAliasTotalWithTtl(productName);
+
+        // Step 3: Product 등록 카운터 increment
         String counterKey = POSITIVE_COUNTER_PREFIX + productName;
         Long currentCount = redisTemplate.opsForValue().increment(counterKey);
 
+        // TODO : 다시 깊게 생각. increment 실패 -> db 조회 후 복원하면 increment를 안 해도 되나?
         if (currentCount == null) {
-            log.warn("[긍정 피드백 집계] Redis increment 실패, DB 폴백. productName='{}'", productName);
+            log.warn("[긍정 피드백] Redis increment 실패, DB 폴백. productName='{}'", productName);
             checkAndPublishEvent(snapshot, productName);
             return;
         }
 
-        log.debug("[긍정 피드백 집계] Redis 카운터 증가. productName='{}', count={}",
-                productName, currentCount);
+        log.debug("[긍정 피드백] 카운터 증가. productName='{}', count={}", productName, currentCount);
 
-        // ── Step 3: 카운터 빠른 차단 ──────────────────────────
-        if (currentCount < COUNTER_QUICK_FILTER) {
-            log.debug("[긍정 피드백 집계] 카운터 미달, DB 조회 생략. productName='{}', count={}/{}",
-                    productName, currentCount, COUNTER_QUICK_FILTER);
-            return;
-        }
+        if (currentCount < COUNTER_QUICK_FILTER) return;
 
-        // ── Step 4: DB 집계 조회 + 정책 검증 ──────────────────
+        // ── Step 4: DB 집계 + 정책 검증 ───────────────────────────
         checkAndPublishEvent(snapshot, productName);
     }
 
     private void checkAndPublishEvent(REFOriginalRecognitionSnapshot snapshot,
                                       String productName) {
-        REFFeedbackAggregationResult aggregation = feedbackQueryService.getAggregation(productName);
+        REFFeedbackAggregationResult aggregation =
+                feedbackQueryService.getAggregation(productName);
 
-        log.debug("[긍정 피드백 집계] 정책 검증. productName='{}', 긍정={}, 부정={}, score={}",
-                productName,
-                aggregation.approvedCount(),
-                aggregation.correctedCount(),
-                registrationPolicy.calculateScore(aggregation));
-
-        if (!registrationPolicy.isMet(aggregation)) {
-            return;
-        }
+        if (!registrationPolicy.isMet(aggregation)) return;
 
         eventPublisher.publishEvent(new REFProductFeedbackAggregationEvent(
                 snapshot.getProductName(),
@@ -123,10 +130,23 @@ public class REFPositiveFeedbackAggregationHandler {
                 snapshot.getImageUrl()
         ));
 
-        log.info("[긍정 피드백 집계] Product 등록 이벤트 발행. productName='{}', groceryItemId={}, score={}",
-                productName,
-                snapshot.getGroceryItemId(),
-                registrationPolicy.calculateScore(aggregation));
+        log.info("[긍정 피드백] Product 등록 이벤트 발행. productName='{}', score={}",
+                productName, registrationPolicy.calculateScore(aggregation));
+    }
+
+    /**
+     * alias 후보 Hash의 __total__ +1 및 TTL을 30일로 갱신합니다.
+     * 긍정 피드백도 해당 제품에 대한 활동이므로 만료 시점을 연장합니다.
+     */
+    private void incrementAliasTotalWithTtl(String productName) {
+        try {
+            String hashKey = ALIAS_CANDIDATE_PREFIX + productName;
+            redisTemplate.opsForHash().increment(hashKey, ALIAS_TOTAL_FIELD, 1);
+            redisTemplate.expire(hashKey, CANDIDATE_TTL);
+        } catch (Exception e) {
+            log.warn("[긍정 피드백] alias __total__ 증가 실패. productName='{}', 사유: {}",
+                    productName, e.getMessage());
+        }
     }
 
     private boolean isAlreadyRegistered(String productName) {
