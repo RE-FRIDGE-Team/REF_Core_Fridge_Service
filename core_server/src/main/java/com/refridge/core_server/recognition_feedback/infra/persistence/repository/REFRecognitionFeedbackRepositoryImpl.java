@@ -7,10 +7,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.refridge.core_server.recognition_feedback.domain.REFRecognitionFeedbackRepositoryCustom;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFFeedbackStatus;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFRecognitionFeedbackId;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackAggregationDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackCorrectionHistoryDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackDetailDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackSummaryDto;
+import com.refridge.core_server.recognition_feedback.infra.persistence.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -27,48 +24,31 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
 
     private final JPAQueryFactory queryFactory;
 
-    /**
-     * 피드백 상세 조회 (단건, feedbackId 기준).
-     * 실행 쿼리: 1개 — Embedded 필드 전체를 단일 SELECT로 조회.
-     */
     @Override
     public Optional<REFFeedbackDetailDto> findDetailByFeedbackId(UUID feedbackId) {
         if (feedbackId == null) return Optional.empty();
-
         REFFeedbackDetailDto result = queryFactory
                 .select(detailProjection())
                 .from(rEFRecognitionFeedback)
                 .where(rEFRecognitionFeedback.id.value.eq(feedbackId))
                 .fetchOne();
-
         return Optional.ofNullable(result);
     }
 
-    /**
-     * 피드백 상세 조회 (단건, recognitionId 기준).
-     * 실행 쿼리: 1개 — 유니크 제약으로 최대 1건 보장.
-     */
     @Override
     public Optional<REFFeedbackDetailDto> findDetailByRecognitionId(UUID recognitionId) {
         if (recognitionId == null) return Optional.empty();
-
         REFFeedbackDetailDto result = queryFactory
                 .select(detailProjection())
                 .from(rEFRecognitionFeedback)
                 .where(rEFRecognitionFeedback.recognitionReference.recognitionId.eq(recognitionId))
                 .fetchOne();
-
         return Optional.ofNullable(result);
     }
 
-    /**
-     * 사용자별 피드백 요약 목록.
-     * 실행 쿼리: 1개 — 상태 필터 optional.
-     */
     @Override
     public List<REFFeedbackSummaryDto> findSummariesByRequesterId(UUID requesterId, String statusCode) {
         if (requesterId == null) return List.of();
-
         return queryFactory
                 .select(Projections.constructor(
                         REFFeedbackSummaryDto.class,
@@ -92,16 +72,9 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .fetch();
     }
 
-    /**
-     * 제품명 기준 긍정/부정 피드백 집계.
-     * 실행 쿼리: 1개 — CASE WHEN + GROUP BY로 단일 쿼리 집계.
-     * <p>
-     * PENDING 상태는 아직 확정되지 않았으므로 집계에서 제외합니다.
-     */
     @Override
     public Optional<REFFeedbackAggregationDto> countAggregationByProductName(String productName) {
         if (productName == null || productName.isBlank()) return Optional.empty();
-
         REFFeedbackAggregationDto result = queryFactory
                 .select(Projections.constructor(
                         REFFeedbackAggregationDto.class,
@@ -120,19 +93,12 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 )
                 .groupBy(rEFRecognitionFeedback.originalSnapshot.productName)
                 .fetchOne();
-
         return Optional.ofNullable(result);
     }
 
-    /**
-     * 자동 승인 대상 PENDING 피드백 ID 목록.
-     * 실행 쿼리: 1개 — 배치에서 순회하며 autoApprove() 호출.
-     *
-     * @param createdBefore 이 시점 이전에 생성된 PENDING 피드백
-     * @param limit         배치 사이즈 제한
-     */
     @Override
-    public List<REFRecognitionFeedbackId> findPendingIdsCreatedBefore(LocalDateTime createdBefore, int limit) {
+    public List<REFRecognitionFeedbackId> findPendingIdsCreatedBefore(
+            LocalDateTime createdBefore, int limit) {
         List<UUID> rawIds = queryFactory
                 .select(rEFRecognitionFeedback.id.value)
                 .from(rEFRecognitionFeedback)
@@ -143,86 +109,13 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .orderBy(rEFRecognitionFeedback.timeMetaData.createdAt.asc())
                 .limit(limit)
                 .fetch();
-
-        return rawIds.stream()
-                .map(REFRecognitionFeedbackId::of)
-                .toList();
+        return rawIds.stream().map(REFRecognitionFeedbackId::of).toList();
     }
 
-    /* ──────────────────── Projection 빌더 ──────────────────── */
-
-    /**
-     * 상세 조회용 Projection.
-     * 원본 스냅샷 + 수정 데이터 + diff + 메타 전체 컬럼.
-     */
-    private com.querydsl.core.types.ConstructorExpression<REFFeedbackDetailDto> detailProjection() {
-        return Projections.constructor(
-                REFFeedbackDetailDto.class,
-                // 식별자
-                rEFRecognitionFeedback.id.value,
-                rEFRecognitionFeedback.recognitionReference.recognitionId,
-                rEFRecognitionFeedback.requesterReference.requesterId,
-                rEFRecognitionFeedback.status.stringValue(),
-
-                // 원본 스냅샷
-                rEFRecognitionFeedback.originalSnapshot.productName,
-                rEFRecognitionFeedback.originalSnapshot.groceryItemId,
-                rEFRecognitionFeedback.originalSnapshot.groceryItemName,
-                rEFRecognitionFeedback.originalSnapshot.categoryPath,
-                rEFRecognitionFeedback.originalSnapshot.brandName,
-                rEFRecognitionFeedback.originalSnapshot.quantity,
-                rEFRecognitionFeedback.originalSnapshot.volume,
-                rEFRecognitionFeedback.originalSnapshot.volumeUnit,
-                rEFRecognitionFeedback.originalSnapshot.imageUrl,
-                rEFRecognitionFeedback.originalSnapshot.completedBy,
-
-                // 사용자 수정
-                rEFRecognitionFeedback.userCorrection.correctedProductName,
-                rEFRecognitionFeedback.userCorrection.correctedGroceryItemName,
-                rEFRecognitionFeedback.userCorrection.correctedCategoryPath,
-                rEFRecognitionFeedback.userCorrection.correctedBrandName,
-                rEFRecognitionFeedback.userCorrection.correctedQuantity,
-                rEFRecognitionFeedback.userCorrection.correctedVolume,
-                rEFRecognitionFeedback.userCorrection.correctedVolumeUnit,
-                rEFRecognitionFeedback.userCorrection.purchasePrice,
-
-                // diff
-                rEFRecognitionFeedback.correctionDiff.productNameChanged,
-                rEFRecognitionFeedback.correctionDiff.groceryItemChanged,
-                rEFRecognitionFeedback.correctionDiff.categoryChanged,
-                rEFRecognitionFeedback.correctionDiff.brandChanged,
-                rEFRecognitionFeedback.correctionDiff.quantityOrVolumeChanged,
-
-                // 메타
-                rEFRecognitionFeedback.autoApproved,
-                rEFRecognitionFeedback.resolvedAt,
-                rEFRecognitionFeedback.timeMetaData.createdAt
-        );
-    }
-
-    /* ──────────────────── 조건 빌더 ──────────────────── */
-
-    private BooleanExpression statusCondition(String statusCode) {
-        if (statusCode == null || statusCode.isBlank()) return null;
-        REFFeedbackStatus status = REFFeedbackStatus.fromDbCode(statusCode);
-        return rEFRecognitionFeedback.status.eq(status);
-    }
-
-
-    /**
-     * 동일 원본 제품명에 대해 CORRECTED 상태인 피드백들의 수정 내용을 집계합니다.
-     * <p>
-     * 동일 수정 조합(제품명+식재료+브랜드+카테고리)을 GROUP BY하여
-     * occurrenceCount(빈도)를 제공합니다. 빈도 높은 순 정렬.
-     * <p>
-     * 실행 쿼리: 1개 — GROUP BY + COUNT + ORDER BY DESC + LIMIT.
-     */
     @Override
     public List<REFFeedbackCorrectionHistoryDto> findCorrectionHistoryByProductName(
             String originalProductName, int limit) {
-
         if (originalProductName == null || originalProductName.isBlank()) return List.of();
-
         return queryFactory
                 .select(Projections.constructor(
                         REFFeedbackCorrectionHistoryDto.class,
@@ -246,5 +139,109 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .orderBy(rEFRecognitionFeedback.id.value.count().desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    /**
+     * 특정 브랜드명으로 수정된 CORRECTED 피드백 수를 조회합니다.
+     * 실행 쿼리: 1개
+     *
+     * SELECT COUNT(*) FROM ref_recognition_feedback
+     * WHERE corrected_brand_name = :correctedBrandName
+     * AND status = 'C'
+     */
+    @Override
+    public long countByCorrectBrandName(String correctedBrandName) {
+        if (correctedBrandName == null || correctedBrandName.isBlank()) return 0L;
+        Long result = queryFactory
+                .select(rEFRecognitionFeedback.id.value.count())
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName
+                                .eq(correctedBrandName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED)
+                )
+                .fetchOne();
+        return result != null ? result : 0L;
+    }
+
+    /**
+     * 원본 제품명 기준으로 수정 제품명별 선택 횟수를 집계합니다.
+     * 실행 쿼리: 1개 (GROUP BY + COUNT)
+     *
+     * SELECT orig_product_name, corrected_product_name, COUNT(*) as selection_count
+     * FROM ref_recognition_feedback
+     * WHERE orig_product_name = :originalProductName
+     * AND status = 'C'
+     * GROUP BY orig_product_name, corrected_product_name
+     * ORDER BY selection_count DESC
+     */
+    @Override
+    public List<REFFeedbackBrandCorrectionCountDto> findAliasCandidateCountsByOriginalName(
+            String originalProductName) {
+        if (originalProductName == null || originalProductName.isBlank()) return List.of();
+        return queryFactory
+                .select(Projections.constructor(
+                        REFFeedbackBrandCorrectionCountDto.class,
+                        rEFRecognitionFeedback.originalSnapshot.productName,
+                        rEFRecognitionFeedback.userCorrection.correctedProductName,
+                        rEFRecognitionFeedback.id.value.count()
+                ))
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.productName.eq(originalProductName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED),
+                        // correctedProductName이 null인 행 제외 (제품명 변경 없는 피드백)
+                        rEFRecognitionFeedback.userCorrection.correctedProductName.isNotNull()
+                )
+                .groupBy(
+                        rEFRecognitionFeedback.originalSnapshot.productName,
+                        rEFRecognitionFeedback.userCorrection.correctedProductName
+                )
+                .orderBy(rEFRecognitionFeedback.id.value.count().desc())
+                .fetch();
+    }
+
+    /* ──────────────────── Projection 빌더 ──────────────────── */
+
+    private com.querydsl.core.types.ConstructorExpression<REFFeedbackDetailDto> detailProjection() {
+        return Projections.constructor(
+                REFFeedbackDetailDto.class,
+                rEFRecognitionFeedback.id.value,
+                rEFRecognitionFeedback.recognitionReference.recognitionId,
+                rEFRecognitionFeedback.requesterReference.requesterId,
+                rEFRecognitionFeedback.status.stringValue(),
+                rEFRecognitionFeedback.originalSnapshot.productName,
+                rEFRecognitionFeedback.originalSnapshot.groceryItemId,
+                rEFRecognitionFeedback.originalSnapshot.groceryItemName,
+                rEFRecognitionFeedback.originalSnapshot.categoryPath,
+                rEFRecognitionFeedback.originalSnapshot.brandName,
+                rEFRecognitionFeedback.originalSnapshot.quantity,
+                rEFRecognitionFeedback.originalSnapshot.volume,
+                rEFRecognitionFeedback.originalSnapshot.volumeUnit,
+                rEFRecognitionFeedback.originalSnapshot.imageUrl,
+                rEFRecognitionFeedback.originalSnapshot.completedBy,
+                rEFRecognitionFeedback.userCorrection.correctedProductName,
+                rEFRecognitionFeedback.userCorrection.correctedGroceryItemName,
+                rEFRecognitionFeedback.userCorrection.correctedCategoryPath,
+                rEFRecognitionFeedback.userCorrection.correctedBrandName,
+                rEFRecognitionFeedback.userCorrection.correctedQuantity,
+                rEFRecognitionFeedback.userCorrection.correctedVolume,
+                rEFRecognitionFeedback.userCorrection.correctedVolumeUnit,
+                rEFRecognitionFeedback.userCorrection.purchasePrice,
+                rEFRecognitionFeedback.correctionDiff.productNameChanged,
+                rEFRecognitionFeedback.correctionDiff.groceryItemChanged,
+                rEFRecognitionFeedback.correctionDiff.categoryChanged,
+                rEFRecognitionFeedback.correctionDiff.brandChanged,
+                rEFRecognitionFeedback.correctionDiff.quantityOrVolumeChanged,
+                rEFRecognitionFeedback.autoApproved,
+                rEFRecognitionFeedback.resolvedAt,
+                rEFRecognitionFeedback.timeMetaData.createdAt
+        );
+    }
+
+    private BooleanExpression statusCondition(String statusCode) {
+        if (statusCode == null || statusCode.isBlank()) return null;
+        REFFeedbackStatus status = REFFeedbackStatus.fromDbCode(statusCode);
+        return rEFRecognitionFeedback.status.eq(status);
     }
 }

@@ -7,8 +7,12 @@ import java.util.Arrays;
 
 /**
  * 관리자 검수가 필요한 항목의 유형입니다.
- * <p>
- * 자동 반영하면 위험도가 높은 변경 사항들을 검수 큐에 적재할 때 사용합니다.
+ *
+ * <h3>브랜드 추가 제거 이유</h3>
+ * 브랜드명은 사용자가 직접 입력하는 필드로, 동일 브랜드를 여러 사용자가
+ * 독립적으로 입력했다는 사실 자체가 검증입니다.
+ * correctionSuggestions에 노출되지 않아 악용 위험이 낮으므로
+ * 자동 반영(REFBrandDictionaryFlushService)으로 처리합니다.
  */
 @Getter
 @RequiredArgsConstructor
@@ -21,10 +25,7 @@ public enum REFReviewType {
     CATEGORY_REASSIGNMENT("카테고리 재분류", "CA"),
 
     /** 신규 GroceryItem 생성 요청 — 사용자가 입력한 식재료명이 DB에 없는 경우 */
-    NEW_GROCERY_ITEM("신규 식재료 등록", "GI"),
-
-    /** 브랜드 사전 추가 요청 — 자동 추가 임계값 미도달이나 검수 필요한 경우 */
-    BRAND_ADDITION("브랜드 사전 추가", "BR");
+    NEW_GROCERY_ITEM("신규 식재료 등록", "GI");
 
     private final String description;
     private final String dbCode;
