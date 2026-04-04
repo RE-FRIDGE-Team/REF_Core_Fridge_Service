@@ -40,6 +40,10 @@ import org.springframework.stereotype.Service;
  * {@link com.refridge.core_server.recognition_feedback.infra.event.REFPositiveFeedbackAggregationHandler}의
  * {@code COUNTER_QUICK_FILTER}는 이 클래스의 {@code MIN_POSITIVE}와 동일한 값이어야 합니다.
  * 두 값이 어긋나면 Redis 빠른 차단이 의미를 잃습니다.
+ *
+ * @author 이승훈
+ * @see REFPositiveFeedbackAggregationHandler
+ * @since 2026. 4. 4.
  */
 @Service
 public class REFProductRegistrationPolicy {
