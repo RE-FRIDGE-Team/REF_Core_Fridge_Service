@@ -7,7 +7,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-public interface REFFeedbackReviewItemRepository extends JpaRepository<REFFeedbackReviewItem, Long> {
+public interface REFFeedbackReviewItemRepository extends JpaRepository<REFFeedbackReviewItem, Long>, REFFeedbackReviewItemRepositoryCustom {
 
     /** 유형 + 대상값으로 기존 검수 항목 조회 (중복 방지, 누적 카운트용) */
     Optional<REFFeedbackReviewItem> findByReviewTypeAndTargetValue(
