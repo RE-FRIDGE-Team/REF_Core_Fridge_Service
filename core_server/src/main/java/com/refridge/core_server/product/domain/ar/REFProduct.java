@@ -15,7 +15,17 @@ import java.time.LocalDateTime;
  * <pre>
  * 제품의 책임:
  * - 실제 유통되는 제품명 색인 (제품명 검색용)
- * - GroceryItem(식재료) 매핑 (분류용)</pre>
+ * - GroceryItem(식재료) 매핑 (분류용)
+ * - 비정규화된 카테고리 참조 보관 ({@link REFGroceryItemReference})
+ * </pre>
+ *
+ * <h3>카테고리 참조 비정규화</h3>
+ * <p>
+ * {@link REFGroceryItemReference}는 {@code groceryItemId}와 함께
+ * {@code majorCategoryId}, {@code minorCategoryId}를 비정규화하여 보유합니다.
+ * GroceryItem의 카테고리가 변경되면 {@link #updateCategoryReference}를 통해
+ * 이 참조를 명시적으로 동기화해야 합니다.
+ * </p>
  */
 @Entity
 @SuppressWarnings("NullableProblems")
@@ -73,7 +83,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     private boolean isVirtual;
 
     @Embedded
-    /* 엔티티 등록 시간, 엔티티 업데이트 시간 */
     private REFEntityTimeMetaData timeMetaData;
 
     /* JPA 생성 시점 콜백 - createdAt 자동 업데이트 */
@@ -93,6 +102,7 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
             timeMetaData = timeMetaData.updateModifiedAt(now);
         }
     }
+
     /**
      * CSV 부트스트랩용 팩토리 메서드.
      * productType: 일단 전부 GENERIC으로 적재, 추후 배치 보정 예정
@@ -107,10 +117,30 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
         return REFProduct.builder()
                 .productName(REFProductName.of(productName))
                 .brandName(REFBrandName.of(brandName))
-                .groceryItemReference(REFGroceryItemReference.of(groceryItemId, majorCategoryId, minorCategoryId))
+                .groceryItemReference(REFGroceryItemReference.of(
+                        groceryItemId, majorCategoryId, minorCategoryId))
                 .productType(REFProductType.GENERIC)
                 .status(REFProductStatus.ACTIVE)
                 .isVirtual(false)
                 .build();
+    }
+
+    /**
+     * GroceryItem 카테고리 변경 시 Product의 비정규화된 카테고리 참조를 갱신합니다.
+     * <p>
+     * {@link REFGroceryItemReference}는 {@code majorCategoryId}와 {@code minorCategoryId}를
+     * 비정규화하여 보유합니다. 관리자가 카테고리 재분류를 승인하면
+     * {@code REFCategoryChangeOnApprovalEventHandler}가 이 메서드를 호출하여
+     * GroceryItem과 Product의 카테고리 정보를 일관되게 유지합니다.
+     *
+     * @param newMajorCategoryId 새 대분류 카테고리 ID
+     * @param newMinorCategoryId 새 중분류 카테고리 ID
+     */
+    public void updateCategoryReference(Long newMajorCategoryId, Long newMinorCategoryId) {
+        this.groceryItemReference = REFGroceryItemReference.of(
+                this.groceryItemReference.getGroceryItemId(),
+                newMajorCategoryId,
+                newMinorCategoryId
+        );
     }
 }
