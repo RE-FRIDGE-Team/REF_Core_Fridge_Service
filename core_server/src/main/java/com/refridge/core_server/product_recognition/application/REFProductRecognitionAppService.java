@@ -22,6 +22,36 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 제품명 인식 파이프라인 Application Service입니다.
+ *
+ * <h3>파이프라인 순서</h3>
+ * <pre>
+ *   1. ProductNameParsing  — 브랜드/수량/용량 추출, 제품명 정제
+ *   2. ExclusionFilter     — 비식재료 사전 필터 (샴푸, 세제 등 조기 차단)
+ *   3. ProductIndexSearch  — 등록된 Product DB 검색 (가장 빠른 정확 매칭)
+ *   4. GroceryItemDictMatch — 식재료 사전 매칭 (Aho-Corasick)
+ *   5. MLPrediction        — ML 모델 예측 (최후 수단)
+ * </pre>
+ *
+ * <h3>ProductIndexSearch를 GroceryItemDictMatch보다 앞에 두는 이유</h3>
+ * <p>
+ * 관리자가 카테고리 재분류를 승인하면 {@code REFCategoryChangeOnApprovalEventHandler}가
+ * 수정된 카테고리로 신규 Product를 등록합니다.
+ * ProductIndexSearch가 GroceryItemDict보다 앞에 있어야
+ * 다음 인식 시 이 Product를 우선 찾아 올바른 카테고리로 매칭합니다.
+ * ProductIndexSearch 이전에 GroceryItemDictMatch가 실행되면
+ * 오래된 사전 정보로 잘못 매칭될 수 있습니다.
+ * </p>
+ *
+ * <h3>alias 처리 방식</h3>
+ * <p>
+ * alias 교체는 파이프라인 내부가 아닌 응답 수준에서만 수행합니다.
+ * 파이프라인 중간에 alias로 refinedText를 교체하면
+ * 이미 "원본 제품명"으로 등록된 Product를 ProductIndexSearcher가 찾지 못하는
+ * 역설적 상황이 발생합니다.
+ * </p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -42,12 +72,14 @@ public class REFProductRecognitionAppService {
     /**
      * alias 조회는 파이프라인 완료 후 응답 수준에서만 수행합니다.
      *
+     * <p>
      * 파이프라인 내부에서 alias를 교체하지 않는 이유:
-     *   1. 기존 Product("해찬들 초고추장 340ml")를 ProductIndexSearch가 찾아야 함
-     *   2. searchByProductName()의 forwardLike/reverseLike가 원본명으로 커버
-     *   3. AR 저장, 피드백 집계는 원본명 기준 유지 (이력 일관성)
-     *
-     * Product 등록 시에는 REFProductFeedbackAggregationEventHandler에서 alias 적용.
+     * </p>
+     * <ol>
+     *   <li>기존 Product("해찬들 초고추장 340ml")를 ProductIndexSearch가 찾아야 함</li>
+     *   <li>searchByProductName()의 forwardLike/reverseLike가 원본명으로 커버</li>
+     *   <li>AR 저장, 피드백 집계는 원본명 기준 유지 (이력 일관성)</li>
+     * </ol>
      */
     private final REFAliasConfirmationService aliasConfirmationService;
 
@@ -78,9 +110,6 @@ public class REFProductRecognitionAppService {
         publishCompletionEvent(recognition, pipelineResult);
 
         // ── 4. 응답 수준 alias 교체 ──────────────────────────────────
-        // 파이프라인은 원본 refinedText("해찬들 초고추장 340ml")로 완료됨
-        // 응답에서만 alias("해찬들 초고추장")로 교체
-        // AR 저장, 피드백 집계, Product 탐색은 원본명 기준 유지
         REFCachedPipelineResult responseResult = applyAliasToResult(pipelineResult);
 
         // 5. 응답 생성
@@ -88,9 +117,6 @@ public class REFProductRecognitionAppService {
                 REFRecognitionResultResponse.from(responseResult);
 
         // ── 6. correctionSuggestions 조회 ────────────────────────────
-        // alias 적용 시: 이미 검증된 올바른 이름 → suggestions 생략
-        // 비식재료 반려: suggestions 조회 대상 아님
-        // 원본명 기준으로 조회 (alias 교체 전 refinedText 사용)
         if (!responseResult.rejected()
                 && !responseResult.aliasApplied()
                 && pipelineResult.refinedText() != null) {
@@ -108,7 +134,7 @@ public class REFProductRecognitionAppService {
 
     /**
      * 파이프라인 완료 후 응답 수준에서 alias를 적용합니다.
-     *
+     * <p>
      * 캐시 저장은 항상 원본(aliasApplied=false)으로 유지합니다.
      * alias reopen 시 stale 캐시 문제를 방지하기 위해
      * alias 교체된 결과는 캐시에 저장하지 않습니다.
@@ -132,14 +158,26 @@ public class REFProductRecognitionAppService {
         return pipelineResult.withAliasApplied(aliasName);
     }
 
+    /**
+     * 파이프라인을 실행합니다.
+     *
+     * <h3>핸들러 순서 (변경됨)</h3>
+     * <pre>
+     *   Parsing → Exclusion → ProductIndexSearch → GroceryItemDictMatch → MLPrediction
+     * </pre>
+     * <p>
+     * ProductIndexSearch를 GroceryItemDictMatch보다 앞에 두어
+     * 관리자 카테고리 재분류 승인으로 등록된 Product를 우선 매칭합니다.
+     * </p>
+     */
     private REFRecognitionContext executePipeline(String inputText,
                                                   REFProductRecognition recognition) {
         REFRecognitionPipeline pipeline = new REFRecognitionPipeline(List.of(
-                productNameParsingHandler,
-                exclusionFilterHandler,
-                groceryItemDictMatchHandler,
-                productIndexSearchHandler,
-                mlPredictionHandler
+                productNameParsingHandler,      // 1. 브랜드/수량/용량 추출, 제품명 정제
+                exclusionFilterHandler,         // 2. 비식재료 사전 필터
+                productIndexSearchHandler,      // 3. 등록된 Product 검색 (우선순위 상향)
+                groceryItemDictMatchHandler,    // 4. 식재료 사전 매칭
+                mlPredictionHandler             // 5. ML 모델 예측 (최후 수단)
         ));
         return pipeline.execute(new REFRecognitionContext(inputText, recognition));
     }
@@ -162,8 +200,6 @@ public class REFProductRecognitionAppService {
                 default -> log.warn("알 수 없는 completedBy: {}", result.completedBy());
             }
         }
-        // AR에는 항상 원본 파이프라인 결과 저장 (alias 미적용)
-        // 피드백 집계(orig_product_name), 긍정 카운터 모두 원본명 기준 유지
         recognition.applyParsedResult(rebuildParsedInfoFromCache(result));
     }
 
@@ -172,7 +208,7 @@ public class REFProductRecognitionAppService {
         return com.refridge.core_server.product_recognition.domain.vo.REFParsedProductInformation
                 .builder()
                 .originalText(cached.originalText())
-                .refinedText(cached.refinedText())  // 원본명 유지
+                .refinedText(cached.refinedText())
                 .brandName(cached.brandName())
                 .quantity(cached.quantity())
                 .volume(cached.volume())
