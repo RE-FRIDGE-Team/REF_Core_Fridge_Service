@@ -1,5 +1,6 @@
 package com.refridge.core_server.recognition_feedback.presentation;
 
+import com.refridge.core_server.recognition_feedback.application.REFMLTrainingExportService;
 import com.refridge.core_server.recognition_feedback.application.REFReviewAdminService;
 import com.refridge.core_server.recognition_feedback.application.REFReviewItemQueryService;
 import com.refridge.core_server.recognition_feedback.application.dto.command.REFReviewApproveCommand;
@@ -10,9 +11,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -26,11 +32,13 @@ import java.util.Map;
  *
  * <h3>엔드포인트 목록</h3>
  * <pre>
- *   GET  /admin/review                  검수 항목 목록 조회 (상태/유형 필터 + 페이징)
- *   GET  /admin/review/{reviewId}       검수 항목 단건 조회
- *   POST /admin/review/{reviewId}/approve  검수 항목 승인
- *   POST /admin/review/{reviewId}/reject   검수 항목 반려
- *   GET  /admin/review/stats            검수 현황 요약 (PENDING/ML 학습 대기 건수)
+ *   GET  /admin/review                       검수 항목 목록 조회 (상태/유형 필터 + 페이징)
+ *   GET  /admin/review/stats                 검수 현황 요약 (PENDING / ML학습대기 건수)
+ *   GET  /admin/review/{reviewId}            검수 항목 단건 조회
+ *   POST /admin/review/{reviewId}/approve    검수 항목 승인
+ *   POST /admin/review/{reviewId}/reject     검수 항목 반려
+ *   GET  /admin/review/ml-training/export    ML 학습 데이터 CSV 내보내기
+ *   GET  /admin/review/ml-training/count     ML 학습 대기 건수 조회
  * </pre>
  *
  * @author 이승훈
@@ -44,6 +52,9 @@ public class REFReviewAdminController {
 
     private final REFReviewAdminService reviewAdminService;
     private final REFReviewItemQueryService reviewItemQueryService;
+    private final REFMLTrainingExportService mlTrainingExportService;
+
+    /* ──────────────────── 검수 큐 조회 ──────────────────── */
 
     /**
      * 검수 항목 목록을 조회합니다.
@@ -66,6 +77,25 @@ public class REFReviewAdminController {
     }
 
     /**
+     * 검수 현황 요약을 조회합니다 (대시보드 배지용).
+     *
+     * <h3>응답 예시</h3>
+     * <pre>
+     * {
+     *   "pendingCount": 42,
+     *   "mlTrainingPendingCount": 7
+     * }
+     * </pre>
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Long>> getReviewStats() {
+        return ResponseEntity.ok(Map.of(
+                "pendingCount", reviewItemQueryService.getPendingCount(),
+                "mlTrainingPendingCount", reviewItemQueryService.getMlTrainingPendingCount()
+        ));
+    }
+
+    /**
      * 검수 항목 단건을 조회합니다.
      *
      * @param reviewId 검수 항목 ID
@@ -76,6 +106,8 @@ public class REFReviewAdminController {
 
         return ResponseEntity.ok(reviewItemQueryService.getReviewItem(reviewId));
     }
+
+    /* ──────────────────── 승인 / 반려 ──────────────────── */
 
     /**
      * 검수 항목을 승인합니다.
@@ -142,22 +174,61 @@ public class REFReviewAdminController {
         return ResponseEntity.ok().build();
     }
 
+    /* ──────────────────── ML 학습 데이터 내보내기 ──────────────────── */
+
     /**
-     * 검수 현황 요약을 조회합니다 (대시보드 배지용).
+     * ML 학습 대기({@code ML_TRAINING_PENDING}) 항목을 CSV 파일로 내보냅니다.
+     *
+     * <h3>처리 순서</h3>
+     * <ol>
+     *   <li>ML_TRAINING_PENDING 항목 조회 (최대 {@code limit}건, 기본값 1,000)</li>
+     *   <li>CSV 파일 생성 (UTF-8 BOM 포함, Excel 한글 호환)</li>
+     *   <li>각 항목 상태를 ML_TRAINING_PENDING → APPROVED로 전환</li>
+     *   <li>CSV 파일 다운로드 응답 반환</li>
+     * </ol>
+     *
+     * <h3>파일명</h3>
+     * <pre>ml_training_data_{yyyy-MM-dd}.csv</pre>
+     *
+     * @param limit 최대 내보내기 건수 (기본값 1,000)
+     */
+    @GetMapping("/ml-training/export")
+    public ResponseEntity<byte[]> exportMlTrainingData(
+            @RequestParam(defaultValue = "1000") int limit) {
+
+        log.info("[ML 학습 내보내기] 요청. limit={}", limit);
+
+        byte[] csvBytes = mlTrainingExportService.exportAndComplete(limit);
+
+        String filename = "ml_training_data_" + LocalDate.now() + ".csv";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(
+                new MediaType("text", "csv", StandardCharsets.UTF_8));
+        headers.setContentDisposition(
+                ContentDisposition.attachment().filename(filename).build());
+        headers.setContentLength(csvBytes.length);
+
+        log.info("[ML 학습 내보내기] 응답. filename='{}', size={}bytes",
+                filename, csvBytes.length);
+
+        return ResponseEntity.ok().headers(headers).body(csvBytes);
+    }
+
+    /**
+     * ML 학습 대기 항목 건수를 조회합니다 (내보내기 전 미리보기용).
      *
      * <h3>응답 예시</h3>
      * <pre>
      * {
-     *   "pendingCount": 42,
-     *   "mlTrainingPendingCount": 7
+     *   "mlTrainingPendingCount": 37
      * }
      * </pre>
      */
-    @GetMapping("/stats")
-    public ResponseEntity<Map<String, Long>> getReviewStats() {
+    @GetMapping("/ml-training/count")
+    public ResponseEntity<Map<String, Long>> getMlTrainingPendingCount() {
         return ResponseEntity.ok(Map.of(
-                "pendingCount", reviewItemQueryService.getPendingCount(),
-                "mlTrainingPendingCount", reviewItemQueryService.getMlTrainingPendingCount()
+                "mlTrainingPendingCount", mlTrainingExportService.countPendingItems()
         ));
     }
 
@@ -174,8 +245,7 @@ public class REFReviewAdminController {
             String adminNote,
             String origProductName,
             String origBrandName
-    ) {
-    }
+    ) {}
 
     /**
      * 반려 요청 본문.
@@ -184,6 +254,5 @@ public class REFReviewAdminController {
      */
     public record ReviewRejectRequest(
             String adminNote
-    ) {
-    }
+    ) {}
 }
