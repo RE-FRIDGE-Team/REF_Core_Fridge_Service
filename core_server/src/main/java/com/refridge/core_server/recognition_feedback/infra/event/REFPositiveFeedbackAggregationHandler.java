@@ -4,8 +4,10 @@ import com.refridge.core_server.recognition_feedback.application.REFFeedbackQuer
 import com.refridge.core_server.recognition_feedback.application.dto.result.REFFeedbackAggregationResult;
 import com.refridge.core_server.recognition_feedback.domain.event.REFPositiveFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.event.REFProductFeedbackAggregationEvent;
+import com.refridge.core_server.recognition_feedback.domain.service.REFExclusionRemovalPolicy;
 import com.refridge.core_server.recognition_feedback.domain.service.REFProductRegistrationPolicy;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFOriginalRecognitionSnapshot;
+import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFExclusionRemovalRedisCounter;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFNegativeFeedbackDispatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,16 +53,28 @@ import java.time.Duration;
  * {@code CANDIDATE_TTL}(30일)로 자동 연장합니다.</li>
  * </ul>
  *
- * <h4>4. Redis 키와 동작에 대한 설명</h4>
+ * <h4>4. 비식재료 반려 묵인 신호 집계</h4>
+ * <p>
+ * {@code snapshot.isRejected() == true}인 긍정 피드백은
+ * "비식재료로 반려됐지만 사용자가 이의 없이 넘어간" 케이스입니다.
+ * 이 신호를 {@link REFExclusionRemovalRedisCounter#incrementAccept}로 집계하여
+ * {@link REFExclusionRemovalPolicy}의
+ * Gate 2 (dispute 비율 계산)에 활용합니다.
+ * 비식재료 반려 묵인이 많을수록 실제로 비식재료일 가능성이 높아 자동 제거가 억제됩니다.
+ * </p>
+ *
+ * <h4>5. Redis 키와 동작에 대한 설명</h4>
  * <ul>
  * <li><b>{@code feedback:positive:}</b> product 등록만을 위한 카운터이며, 임계값을 넘으면 등록 이벤트를 발행. 초기화 되더라도 등록 이벤트는 upsert이기 때문에 상관 없음.</li>
  * <li><b>{@code feedback:registered:}</b> 긍정 피드백을 통해 제품이 등록된 경우를 나타내는 태그, 초기화 되더라도 등록 이벤트는 upsert이기 때문에 상관 없음.</li>
  * <li><b>{@code feedback:product-alias:}</b> {@code __total__}과 부정 피드백에서 사용자의 수정본을 값으로 들고 있는 해시. 긍정값은 별도로 없고 {@code __total__}에서 나머지 카운터 값을 뺀 것으로 관리</li>
+ * <li><b>{@code feedback:exclusion-accept:}</b> [신규] 비식재료 반려를 묵인(승인)한 횟수. REFExclusionRemovalPolicy Gate 2에서 사용.</li>
  * </ul>
  *
  * @author 이승훈
  * @see REFProductRegistrationPolicy
  * @see REFProductFeedbackAggregationEvent
+ * @see REFExclusionRemovalRedisCounter
  * @since 2026. 4. 3.
  */
 @Slf4j
@@ -72,6 +86,9 @@ public class REFPositiveFeedbackAggregationHandler {
     private final REFProductRegistrationPolicy registrationPolicy;
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
+
+    /** [신규] 비식재료 반려 묵인 신호 집계용 */
+    private final REFExclusionRemovalRedisCounter exclusionRemovalRedisCounter;
 
     /**
      * Redis Key Prefixes, 자세한 내용은 위의 Javadocs 참고.
@@ -92,9 +109,22 @@ public class REFPositiveFeedbackAggregationHandler {
         REFOriginalRecognitionSnapshot snapshot = event.snapshot();
         String productName = snapshot.getProductName();
 
-        // * early return 조건: 제품명 누락/공백, 피드백 거절된 경우
+        // ── [신규] 비식재료 반려 묵인 신호 집계 ──────────────────────
+        // rejected=true인 긍정 피드백 = "비식재료 반려됐지만 이의 없이 넘어감"
+        // REFExclusionRemovalPolicy Gate 2의 분모(accept)로 활용됨
+        if (snapshot.isRejected()) {
+            String rejectionKeyword = snapshot.getRejectionKeyword();
+            if (rejectionKeyword != null && !rejectionKeyword.isBlank()) {
+                exclusionRemovalRedisCounter.incrementAccept(rejectionKeyword);
+                log.debug("[긍정 피드백] 비식재료 반려 묵인 집계. keyword='{}', productName='{}'",
+                        rejectionKeyword, productName);
+            }
+            // rejected 케이스는 Product 등록 로직과 무관하므로 early return
+            return;
+        }
+
+        // * early return 조건: 제품명 누락/공백
         if (productName == null || productName.isBlank()) return;
-        if (snapshot.isRejected()) return;
 
         // Step 1: 이미 제품으로 등록된 경우 early return + alias __total__ +1 + TTL 갱신
         // feedback:positive: 카운터는 등록 판단 전용이므로 REGISTERED 이후 증가 불필요.
