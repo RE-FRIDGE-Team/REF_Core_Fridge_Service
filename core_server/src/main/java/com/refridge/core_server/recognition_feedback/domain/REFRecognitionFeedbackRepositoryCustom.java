@@ -1,11 +1,7 @@
 package com.refridge.core_server.recognition_feedback.domain;
 
 import com.refridge.core_server.recognition_feedback.domain.vo.REFRecognitionFeedbackId;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackAggregationDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackBrandCorrectionCountDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackCorrectionHistoryDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackDetailDto;
-import com.refridge.core_server.recognition_feedback.infra.persistence.dto.REFFeedbackSummaryDto;
+import com.refridge.core_server.recognition_feedback.infra.persistence.dto.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,4 +37,15 @@ public interface REFRecognitionFeedbackRepositoryCustom {
      */
     List<REFFeedbackBrandCorrectionCountDto> findAliasCandidateCountsByOriginalName(
             String originalProductName);
+
+    /**
+     * 특정 원본 식재료명에 대해 CORRECTED 상태인 피드백들의
+     * 수정 식재료명별 선택 횟수를 조회합니다.
+     * Redis grocery-item-mapping 후보 Hash 만료 후 복원에 사용됩니다.
+     *
+     * @param originalGroceryItemName 원본 식재료명 (orig_grocery_item_name)
+     * @return 수정 식재료명 → 선택 횟수 목록 (횟수 내림차순)
+     */
+    List<REFFeedbackGroceryItemMappingCountDto> findGroceryItemMappingCountsByOriginalName(
+            String originalGroceryItemName);
 }
