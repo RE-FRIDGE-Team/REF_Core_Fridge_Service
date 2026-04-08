@@ -8,7 +8,7 @@ import com.refridge.core_server.recognition_feedback.domain.service.REFExclusion
 import com.refridge.core_server.recognition_feedback.domain.service.REFProductRegistrationPolicy;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFOriginalRecognitionSnapshot;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFExclusionRemovalRedisCounter;
-import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFGroceryItemMappingConfirmationService;
+import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFGroceryItemCorrectionService;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFNegativeFeedbackDispatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,8 @@ import java.time.Duration;
  * <p>
  * {@code RE:FRIDGE}의 5단계 인식 파이프라인 결과를 사용자가 수정 없이 수락('냉장고에 추가')할 때
  * 발생하는 긍정 피드백 이벤트를 처리합니다.<br>
- * 긍정 피드백을 가장 먼저 마주하는 클래스이며, 부정 피드백을 가정 먼저 마주하는 클래스는 {@link REFNegativeFeedbackDispatcher}입니다.
+ * 긍정 피드백을 가장 먼저 마주하는 클래스이며, 부정 피드백을 가장 먼저 마주하는 클래스는
+ * {@link REFNegativeFeedbackDispatcher}입니다.
  * </p>
  *
  * <blockquote>
@@ -49,9 +50,9 @@ import java.time.Duration;
  *
  * <h4>3. Redis TTL 관리 정책</h4>
  * <ul>
- * <li><b>대상:</b> 별칭(Alias) 후보 Hash 데이터 ({@code feedback:product-alias:{name}})</li>
- * <li><b>갱신:</b> 긍정 피드백 발생 시 해당 제품을 '활성 상태'로 간주하여 TTL을
- * {@code CANDIDATE_TTL}(30일)로 자동 연장합니다.</li>
+ * <li><b>대상:</b> alias 후보 Hash ({@code feedback:product-alias:{name}})
+ *     및 식재료명 교정 후보 Hash ({@code feedback:grocery-item-correction:{name}})</li>
+ * <li><b>갱신:</b> 긍정 피드백 발생 시 두 Hash 모두 TTL을 {@code CANDIDATE_TTL}(30일)로 연장합니다.</li>
  * </ul>
  *
  * <h4>4. 비식재료 반려 묵인 신호 집계</h4>
@@ -59,23 +60,24 @@ import java.time.Duration;
  * {@code snapshot.isRejected() == true}인 긍정 피드백은
  * "비식재료로 반려됐지만 사용자가 이의 없이 넘어간" 케이스입니다.
  * 이 신호를 {@link REFExclusionRemovalRedisCounter#incrementAccept}로 집계하여
- * {@link REFExclusionRemovalPolicy}의
- * Gate 2 (dispute 비율 계산)에 활용합니다.
+ * {@link REFExclusionRemovalPolicy}의 Gate 2 (dispute 비율 계산)에 활용합니다.
  * 비식재료 반려 묵인이 많을수록 실제로 비식재료일 가능성이 높아 자동 제거가 억제됩니다.
  * </p>
  *
- * <h4>5. Redis 키와 동작에 대한 설명</h4>
+ * <h4>5. Redis 키 목록</h4>
  * <ul>
- * <li><b>{@code feedback:positive:}</b> product 등록만을 위한 카운터이며, 임계값을 넘으면 등록 이벤트를 발행. 초기화 되더라도 등록 이벤트는 upsert이기 때문에 상관 없음.</li>
- * <li><b>{@code feedback:registered:}</b> 긍정 피드백을 통해 제품이 등록된 경우를 나타내는 태그, 초기화 되더라도 등록 이벤트는 upsert이기 때문에 상관 없음.</li>
- * <li><b>{@code feedback:product-alias:}</b> {@code __total__}과 부정 피드백에서 사용자의 수정본을 값으로 들고 있는 해시. 긍정값은 별도로 없고 {@code __total__}에서 나머지 카운터 값을 뺀 것으로 관리</li>
- * <li><b>{@code feedback:exclusion-accept:}</b> [신규] 비식재료 반려를 묵인(승인)한 횟수. REFExclusionRemovalPolicy Gate 2에서 사용.</li>
+ * <li><b>{@code feedback:positive:}</b> Product 등록 전용 카운터</li>
+ * <li><b>{@code feedback:registered:}</b> Product 등록 완료 플래그</li>
+ * <li><b>{@code feedback:product-alias:}</b> 제품명 alias 후보 Hash ({@code __total__} 포함)</li>
+ * <li><b>{@code feedback:grocery-item-correction:}</b> 식재료명 교정 후보 Hash ({@code __total__} 포함)</li>
+ * <li><b>{@code feedback:exclusion-accept:}</b> 비식재료 반려 묵인 횟수</li>
  * </ul>
  *
  * @author 이승훈
  * @see REFProductRegistrationPolicy
  * @see REFProductFeedbackAggregationEvent
  * @see REFExclusionRemovalRedisCounter
+ * @see REFGroceryItemCorrectionService
  * @since 2026. 4. 3.
  */
 @Slf4j
@@ -87,23 +89,14 @@ public class REFPositiveFeedbackAggregationHandler {
     private final REFProductRegistrationPolicy registrationPolicy;
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
-
-    /**
-     * [신규] 비식재료 반려 묵인 신호 집계용
-     */
     private final REFExclusionRemovalRedisCounter exclusionRemovalRedisCounter;
 
-    /**
-     * Redis Key Prefixes, 자세한 내용은 위의 Javadocs 참고.
-     */
     static final String POSITIVE_COUNTER_PREFIX = "feedback:positive:";
     static final String REGISTERED_FLAG_PREFIX = "feedback:registered:";
     private static final String ALIAS_CANDIDATE_PREFIX = "feedback:product-alias:";
     private static final String ALIAS_TOTAL_FIELD = "__total__";
 
-    /**
-     * alias 후보 Hash TTL — 30일간 활동 없으면 자동 만료
-     */
+    /** alias/교정 후보 Hash TTL — 30일간 활동 없으면 자동 만료 */
     private static final Duration CANDIDATE_TTL = Duration.ofDays(30);
     private static final int COUNTER_QUICK_FILTER = REFProductRegistrationPolicy.MIN_POSITIVE;
 
@@ -112,7 +105,7 @@ public class REFPositiveFeedbackAggregationHandler {
         REFOriginalRecognitionSnapshot snapshot = event.snapshot();
         String productName = snapshot.getProductName();
 
-        // ── [신규] 비식재료 반려 묵인 신호 집계 ──────────────────────
+        // ── 비식재료 반려 묵인 신호 집계 ─────────────────────────────
         // rejected=true인 긍정 피드백 = "비식재료 반려됐지만 이의 없이 넘어감"
         // REFExclusionRemovalPolicy Gate 2의 분모(accept)로 활용됨
         if (snapshot.isRejected()) {
@@ -122,43 +115,31 @@ public class REFPositiveFeedbackAggregationHandler {
                 log.debug("[긍정 피드백] 비식재료 반려 묵인 집계. keyword='{}', productName='{}'",
                         rejectionKeyword, productName);
             }
-            // rejected 케이스는 Product 등록 로직과 무관하므로 early return
             return;
         }
 
-        // * early return 조건: 제품명 누락/공백
         if (productName == null || productName.isBlank()) return;
 
-        // Step 1: 이미 제품으로 등록된 경우 early return + alias __total__ +1 + TTL 갱신
-        // feedback:positive: 카운터는 등록 판단 전용이므로 REGISTERED 이후 증가 불필요.
+        // Step 1: 이미 등록된 제품 → alias/교정 __total__ 갱신 후 early return
         if (isAlreadyRegistered(productName)) {
             log.debug("[긍정 피드백] 이미 등록된 제품, 스킵. productName='{}'", productName);
             incrementAliasTotalWithTtl(productName);
-            String groceryItemName = snapshot.getGroceryItemName();
-            if (groceryItemName != null && !groceryItemName.isBlank()) {
-                incrementGroceryItemMappingTotalWithTtl(groceryItemName);
-            }
+            incrementCorrectionTotalWithTtl(snapshot.getGroceryItemName());
             return;
         }
 
-        // Step 2: alias __total__ +1 + TTL 갱신, GroceryItem 매핑 __total__ +1
-        // 긍정 피드백도 "이 식재료 인식이 맞다"는 반응
+        // Step 2: alias __total__ +1 + TTL 갱신
         incrementAliasTotalWithTtl(productName);
-        String groceryItemName = snapshot.getGroceryItemName();
-        if (groceryItemName != null && !groceryItemName.isBlank()) {
-            incrementGroceryItemMappingTotalWithTtl(groceryItemName);
-        }
 
-        // Step 3: Product 등록 카운터 increment
-        // Product 자동 등록 조건 판단 전용 카운터. 사용자가 인식 결과를 수정 없이 승인할 때마다 +1.
-        // 이 값이 일정 임계값에 도달하면 DB를 조회해 등록 정책을 검증하고 등록 이벤트를 발행한다.
+        // Step 3: 식재료명 교정 __total__ +1 + TTL 갱신
+        // 긍정 피드백도 "이 식재료 인식이 맞다"는 반응이므로
+        // Gate 2 분모(__total__)에 포함되어 소수 악용 수정본의 확정을 방어
+        incrementCorrectionTotalWithTtl(snapshot.getGroceryItemName());
+
+        // Step 4: Product 등록 카운터 increment
         String counterKey = POSITIVE_COUNTER_PREFIX + productName;
         Long currentCount = redisTemplate.opsForValue().increment(counterKey);
 
-        // increment 실패 시 DB 조회로 폴백.
-        // @TransactionalEventListener(AFTER_COMMIT) 기준이므로
-        // DB의 approvedCount에 현재 피드백이 이미 포함되어 있음.
-        // DB count가 Redis increment보다 정확하므로 별도 increment 없이 DB 조회만으로 충분함.
         if (currentCount == null) {
             log.warn("[긍정 피드백] Redis increment 실패, DB 폴백. productName='{}'", productName);
             checkAndPublishEvent(snapshot, productName);
@@ -169,23 +150,19 @@ public class REFPositiveFeedbackAggregationHandler {
 
         if (currentCount < COUNTER_QUICK_FILTER) return;
 
-        // ── Step 4: DB 집계 + 정책 검증 ───────────────────────────
+        // Step 5: DB 집계 + 정책 검증
         checkAndPublishEvent(snapshot, productName);
     }
 
     /**
-     * DB에서 피드백 집계를 조회하여 등록 조건 충족 여부를 판단하고,<br>
+     * DB에서 피드백 집계를 조회하여 등록 조건 충족 여부를 판단하고,
      * 충족 시 REFProductFeedbackAggregationEvent를 발행합니다.
-     *
-     * @param snapshot    인식 파이프라인이 만들어 낸 결과의 원본 스냅샷
-     * @param productName 제품명 (원본 또는 alias) - DB 집계 조회의 기준이 됩니다.
      */
     private void checkAndPublishEvent(REFOriginalRecognitionSnapshot snapshot,
                                       String productName) {
         REFFeedbackAggregationResult aggregation =
                 feedbackQueryService.getAggregation(productName);
 
-        // 내부 정책 조건 충족 확인
         if (!registrationPolicy.isMet(aggregation)) return;
 
         eventPublisher.publishEvent(new REFProductFeedbackAggregationEvent(
@@ -200,10 +177,10 @@ public class REFPositiveFeedbackAggregationHandler {
     }
 
     /**
-     * 긍정 피드백을 받았으므로, {@code __total__} 값만 증가시킨다.<br>
-     * TTL 30일 추가 : 긍정 피드백도 해당 제품에 대한 활동이므로 만료 시점을 연장합니다.
+     * 제품명 alias 후보 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
      */
     private void incrementAliasTotalWithTtl(String productName) {
+        if (productName == null || productName.isBlank()) return;
         try {
             String hashKey = ALIAS_CANDIDATE_PREFIX + productName;
             redisTemplate.opsForHash().increment(hashKey, ALIAS_TOTAL_FIELD, 1);
@@ -215,33 +192,33 @@ public class REFPositiveFeedbackAggregationHandler {
     }
 
     /**
-     * 제품명이 이미 등록된 경우를 판단합니다. Redis에서 REGISTERED 플래그가 세팅된 경우 등록된 것으로 간주합니다.
+     * 식재료명 교정 후보 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
      *
-     * @param productName
-     * @return {@code true} 등록된 제품, {@code false} 미등록 제품
+     * <p>
+     * {@link REFGroceryItemMappingHandler}가 관리하는 Hash의 분모를 올바르게 유지합니다.
+     * groceryItemName이 null이거나 공백이면 조용히 스킵합니다.
+     * </p>
+     */
+    private void incrementCorrectionTotalWithTtl(String groceryItemName) {
+        if (groceryItemName == null || groceryItemName.isBlank()) return;
+        try {
+            String hashKey = REFGroceryItemCorrectionService.CORRECTION_CANDIDATE_PREFIX
+                    + groceryItemName;
+            redisTemplate.opsForHash().increment(
+                    hashKey, REFGroceryItemCorrectionService.TOTAL_FIELD, 1);
+            redisTemplate.expire(hashKey, CANDIDATE_TTL);
+        } catch (Exception e) {
+            log.warn("[긍정 피드백] 식재료명 교정 __total__ 증가 실패. groceryItemName='{}', 사유: {}",
+                    groceryItemName, e.getMessage());
+        }
+    }
+
+    /**
+     * 제품명이 이미 등록된 경우를 판단합니다.
+     * Redis REGISTERED 플래그 존재 여부로 O(1) 확인합니다.
      */
     private boolean isAlreadyRegistered(String productName) {
         return Boolean.TRUE.equals(
                 redisTemplate.hasKey(REGISTERED_FLAG_PREFIX + productName));
-    }
-
-    /**
-     * 긍정 피드백 시 GroceryItem 매핑 Hash의 __total__ 값을 1 증가시킵니다.
-     * REFGroceryItemMappingHandler가 관리하는 Hash의 분모를 올바르게 유지합니다.
-     */
-    private void incrementGroceryItemMappingTotalWithTtl(String groceryItemName) {
-        try {
-            String hashKey = REFGroceryItemMappingConfirmationService.MAPPING_CANDIDATE_PREFIX
-                    + groceryItemName;
-            redisTemplate.opsForHash().increment(
-                    hashKey,
-                    REFGroceryItemMappingConfirmationService.TOTAL_FIELD,
-                    1
-            );
-            redisTemplate.expire(hashKey, CANDIDATE_TTL);
-        } catch (Exception e) {
-            log.warn("[긍정 피드백] GroceryItem 매핑 __total__ 증가 실패. groceryItemName='{}', 사유: {}",
-                    groceryItemName, e.getMessage());
-        }
     }
 }
