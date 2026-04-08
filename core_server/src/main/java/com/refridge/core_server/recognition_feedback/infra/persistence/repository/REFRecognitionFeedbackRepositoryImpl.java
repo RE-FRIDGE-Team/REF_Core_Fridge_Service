@@ -144,10 +144,10 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
     /**
      * 특정 브랜드명으로 수정된 CORRECTED 피드백 수를 조회합니다.
      * 실행 쿼리: 1개
-     *
+     * <pre>
      * SELECT COUNT(*) FROM ref_recognition_feedback
      * WHERE corrected_brand_name = :correctedBrandName
-     * AND status = 'C'
+     * AND status = 'C'</pre>
      */
     @Override
     public long countByCorrectBrandName(String correctedBrandName) {
@@ -167,13 +167,13 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
     /**
      * 원본 제품명 기준으로 수정 제품명별 선택 횟수를 집계합니다.
      * 실행 쿼리: 1개 (GROUP BY + COUNT)
-     *
+     * <pre>
      * SELECT orig_product_name, corrected_product_name, COUNT(*) as selection_count
      * FROM ref_recognition_feedback
      * WHERE orig_product_name = :originalProductName
      * AND status = 'C'
      * GROUP BY orig_product_name, corrected_product_name
-     * ORDER BY selection_count DESC
+     * ORDER BY selection_count DESC</pre>
      */
     @Override
     public List<REFFeedbackBrandCorrectionCountDto> findAliasCandidateCountsByOriginalName(
@@ -196,6 +196,44 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .groupBy(
                         rEFRecognitionFeedback.originalSnapshot.productName,
                         rEFRecognitionFeedback.userCorrection.correctedProductName
+                )
+                .orderBy(rEFRecognitionFeedback.id.value.count().desc())
+                .fetch();
+    }
+
+    /**
+     * 원본 식재료명 기준으로 수정 식재료명별 선택 횟수를 집계합니다.
+     * 실행 쿼리: 1개 (GROUP BY + COUNT)
+     * <pre>
+     * SELECT orig_grocery_item_name, corrected_grocery_item_name, COUNT(*) as selection_count
+     * FROM ref_recognition_feedback
+     * WHERE orig_grocery_item_name = :originalGroceryItemName
+     * AND status = 'C'
+     * AND corrected_grocery_item_name IS NOT NULL
+     * GROUP BY orig_grocery_item_name, corrected_grocery_item_name
+     * ORDER BY selection_count DESC</pre>
+     */
+    @Override
+    public List<REFFeedbackGroceryItemMappingCountDto> findGroceryItemMappingCountsByOriginalName(
+            String originalGroceryItemName) {
+        if (originalGroceryItemName == null || originalGroceryItemName.isBlank()) return List.of();
+        return queryFactory
+                .select(Projections.constructor(
+                        REFFeedbackGroceryItemMappingCountDto.class,
+                        rEFRecognitionFeedback.originalSnapshot.groceryItemName,
+                        rEFRecognitionFeedback.userCorrection.correctedGroceryItemName,
+                        rEFRecognitionFeedback.id.value.count()
+                ))
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.groceryItemName
+                                .eq(originalGroceryItemName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED),
+                        rEFRecognitionFeedback.userCorrection.correctedGroceryItemName.isNotNull()
+                )
+                .groupBy(
+                        rEFRecognitionFeedback.originalSnapshot.groceryItemName,
+                        rEFRecognitionFeedback.userCorrection.correctedGroceryItemName
                 )
                 .orderBy(rEFRecognitionFeedback.id.value.count().desc())
                 .fetch();
