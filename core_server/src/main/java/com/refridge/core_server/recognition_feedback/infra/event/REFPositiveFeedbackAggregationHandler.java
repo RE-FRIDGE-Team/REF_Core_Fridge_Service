@@ -8,6 +8,7 @@ import com.refridge.core_server.recognition_feedback.domain.service.REFExclusion
 import com.refridge.core_server.recognition_feedback.domain.service.REFProductRegistrationPolicy;
 import com.refridge.core_server.recognition_feedback.domain.vo.REFOriginalRecognitionSnapshot;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFExclusionRemovalRedisCounter;
+import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFGroceryItemMappingConfirmationService;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFNegativeFeedbackDispatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,7 +88,9 @@ public class REFPositiveFeedbackAggregationHandler {
     private final StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** [신규] 비식재료 반려 묵인 신호 집계용 */
+    /**
+     * [신규] 비식재료 반려 묵인 신호 집계용
+     */
     private final REFExclusionRemovalRedisCounter exclusionRemovalRedisCounter;
 
     /**
@@ -131,11 +134,20 @@ public class REFPositiveFeedbackAggregationHandler {
         if (isAlreadyRegistered(productName)) {
             log.debug("[긍정 피드백] 이미 등록된 제품, 스킵. productName='{}'", productName);
             incrementAliasTotalWithTtl(productName);
+            String groceryItemName = snapshot.getGroceryItemName();
+            if (groceryItemName != null && !groceryItemName.isBlank()) {
+                incrementGroceryItemMappingTotalWithTtl(groceryItemName);
+            }
             return;
         }
 
-        // Step 2: alias __total__ +1 + TTL 갱신
+        // Step 2: alias __total__ +1 + TTL 갱신, GroceryItem 매핑 __total__ +1
+        // 긍정 피드백도 "이 식재료 인식이 맞다"는 반응
         incrementAliasTotalWithTtl(productName);
+        String groceryItemName = snapshot.getGroceryItemName();
+        if (groceryItemName != null && !groceryItemName.isBlank()) {
+            incrementGroceryItemMappingTotalWithTtl(groceryItemName);
+        }
 
         // Step 3: Product 등록 카운터 increment
         // Product 자동 등록 조건 판단 전용 카운터. 사용자가 인식 결과를 수정 없이 승인할 때마다 +1.
@@ -211,5 +223,25 @@ public class REFPositiveFeedbackAggregationHandler {
     private boolean isAlreadyRegistered(String productName) {
         return Boolean.TRUE.equals(
                 redisTemplate.hasKey(REGISTERED_FLAG_PREFIX + productName));
+    }
+
+    /**
+     * 긍정 피드백 시 GroceryItem 매핑 Hash의 __total__ 값을 1 증가시킵니다.
+     * REFGroceryItemMappingHandler가 관리하는 Hash의 분모를 올바르게 유지합니다.
+     */
+    private void incrementGroceryItemMappingTotalWithTtl(String groceryItemName) {
+        try {
+            String hashKey = REFGroceryItemMappingConfirmationService.MAPPING_CANDIDATE_PREFIX
+                    + groceryItemName;
+            redisTemplate.opsForHash().increment(
+                    hashKey,
+                    REFGroceryItemMappingConfirmationService.TOTAL_FIELD,
+                    1
+            );
+            redisTemplate.expire(hashKey, CANDIDATE_TTL);
+        } catch (Exception e) {
+            log.warn("[긍정 피드백] GroceryItem 매핑 __total__ 증가 실패. groceryItemName='{}', 사유: {}",
+                    groceryItemName, e.getMessage());
+        }
     }
 }
