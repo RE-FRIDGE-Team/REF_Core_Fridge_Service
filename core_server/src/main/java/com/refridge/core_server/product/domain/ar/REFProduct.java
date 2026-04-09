@@ -130,7 +130,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
      * <p>
      * {@link REFGroceryItemReference}는 {@code majorCategoryId}와 {@code minorCategoryId}를
      * 비정규화하여 보유합니다. 관리자가 카테고리 재분류를 승인하면
-     * {@code REFCategoryChangeOnApprovalEventHandler}가 이 메서드를 호출하여
      * GroceryItem과 Product의 카테고리 정보를 일관되게 유지합니다.
      *
      * @param newMajorCategoryId 새 대분류 카테고리 ID

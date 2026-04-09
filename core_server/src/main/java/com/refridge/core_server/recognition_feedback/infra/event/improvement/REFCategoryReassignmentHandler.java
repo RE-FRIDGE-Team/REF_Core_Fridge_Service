@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  * 카테고리 변경은 GroceryItem의 분류 자체를 바꾸는 것이므로
  * 영향 범위가 넓어 자동 반영하지 않고 관리자 검수 큐에 적재합니다.
  * 관리자가 승인하면 {@code REFCategoryReassignmentApprovedEvent}가 발행되어
- * {@code REFCategoryChangeOnApprovalEventHandler}가 GroceryItem 및 Product의 카테고리를 갱신합니다.
+ * GroceryItem 및 Product의 카테고리를 갱신합니다.
  * </p>
  *
  * <h3>targetValue 형식</h3>
@@ -25,9 +25,6 @@ import org.springframework.stereotype.Component;
  *   "{correctedGroceryItemName}::{correctedCategoryPath}"
  *   예: "두부::채소류 > 두부/묵류"
  * </pre>
- * <p>
- * 이 형식은 {@code REFCategoryChangeOnApprovalEventHandler}가 파싱하여 처리합니다.
- * </p>
  *
  * <h3>식재료명 동시 변경 여부</h3>
  * <ul>
@@ -96,7 +93,6 @@ public class REFCategoryReassignmentHandler implements REFImprovementActionHandl
      * <p>
      * 형식: "{correctedGroceryItemName}::{correctedCategoryPath}"
      * 동시에 식재료명이 변경된 경우 수정된 식재료명을 사용합니다.
-     * 이 값이 {@code REFCategoryChangeOnApprovalEventHandler}에서 파싱됩니다.
      */
     private String buildTargetValue(REFNegativeFeedbackEvent event) {
         String groceryItem = event.diff().isGroceryItemChanged()

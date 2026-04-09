@@ -9,7 +9,6 @@ import com.refridge.core_server.recognition_feedback.application.dto.command.REF
 import com.refridge.core_server.recognition_feedback.application.dto.command.REFReviewRejectCommand;
 import com.refridge.core_server.recognition_feedback.domain.event.REFCategoryReassignmentApprovedEvent;
 import com.refridge.core_server.recognition_feedback.domain.review.*;
-import com.refridge.core_server.recognition_feedback.infra.event.REFCategoryChangeOnApprovalEventHandler;
 import com.refridge.core_server.recognition_feedback.infra.event.improvement.REFExclusionRemovalRedisCounter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       <td>CATEGORY_REASSIGNMENT</td>
  *       <td>모두</td>
  *       <td>APPROVED + REFCategoryReassignmentApprovedEvent 발행
- *           → REFCategoryChangeOnApprovalEventHandler(Async)가 GroceryItem/Product 카테고리 갱신</td>
+ *           → EventHandler(Async)가 GroceryItem/Product 카테고리 갱신</td>
  *     </tr>
  *     <tr>
  *       <td>NEW_GROCERY_ITEM</td>
@@ -68,7 +67,6 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * @author 이승훈
  * @since 2026. 4. 5.
- * @see REFCategoryChangeOnApprovalEventHandler
  */
 @Slf4j
 @Service

@@ -36,7 +36,7 @@ import java.util.Optional;
  *
  * <h3>ProductIndexSearch를 GroceryItemDictMatch보다 앞에 두는 이유</h3>
  * <p>
- * 관리자가 카테고리 재분류를 승인하면 {@code REFCategoryChangeOnApprovalEventHandler}가
+ * 관리자가 카테고리 재분류를 승인하면
  * 수정된 카테고리로 신규 Product를 등록합니다.
  * ProductIndexSearch가 GroceryItemDict보다 앞에 있어야
  * 다음 인식 시 이 Product를 우선 찾아 올바른 카테고리로 매칭합니다.

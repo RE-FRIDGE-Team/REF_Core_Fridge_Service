@@ -28,7 +28,6 @@ public interface REFProductRepository extends JpaRepository<REFProduct, Long>, R
     /**
      * 제품명과 식재료 ID로 ACTIVE 상태의 Product를 조회합니다.
      * <p>
-     * 카테고리 재분류 승인 시 {@code REFCategoryChangeOnApprovalEventHandler}가
      * 기존 Product의 비정규화 카테고리 참조를 갱신하기 위해 사용합니다.
      *
      * @param productName   정제된 제품명

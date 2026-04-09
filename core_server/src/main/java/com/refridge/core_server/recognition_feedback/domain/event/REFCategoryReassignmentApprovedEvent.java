@@ -11,7 +11,7 @@ import java.util.UUID;
  *     → REFReviewAdminService.approveReviewItem()
  *         → REFFeedbackReviewItem.approve()
  *         → REFCategoryReassignmentApprovedEvent 발행
- *             → REFCategoryChangeOnApprovalEventHandler (Async)
+ *             → 해당 EventHandler (Async)
  *                   ① GroceryItem 카테고리 변경
  *                   ② Product 존재 → updateCategoryReference()
  *                      Product 없음  → upsertProduct() (다음 recognition 대비)
@@ -40,7 +40,6 @@ import java.util.UUID;
  *
  * @author 이승훈
  * @since 2026. 4. 5.
- * @see com.refridge.core_server.recognition_feedback.infra.event.REFCategoryChangeOnApprovalEventHandler
  */
 public record REFCategoryReassignmentApprovedEvent(
         Long reviewId,
