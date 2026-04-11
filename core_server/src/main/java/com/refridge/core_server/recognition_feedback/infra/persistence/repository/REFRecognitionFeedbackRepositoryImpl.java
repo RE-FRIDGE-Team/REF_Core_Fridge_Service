@@ -141,14 +141,6 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .fetch();
     }
 
-    /**
-     * 특정 브랜드명으로 수정된 CORRECTED 피드백 수를 조회합니다.
-     * 실행 쿼리: 1개
-     * <pre>
-     * SELECT COUNT(*) FROM ref_recognition_feedback
-     * WHERE corrected_brand_name = :correctedBrandName
-     * AND status = 'C'</pre>
-     */
     @Override
     public long countByCorrectBrandName(String correctedBrandName) {
         if (correctedBrandName == null || correctedBrandName.isBlank()) return 0L;
@@ -164,17 +156,6 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
         return result != null ? result : 0L;
     }
 
-    /**
-     * 원본 제품명 기준으로 수정 제품명별 선택 횟수를 집계합니다.
-     * 실행 쿼리: 1개 (GROUP BY + COUNT)
-     * <pre>
-     * SELECT orig_product_name, corrected_product_name, COUNT(*) as selection_count
-     * FROM ref_recognition_feedback
-     * WHERE orig_product_name = :originalProductName
-     * AND status = 'C'
-     * GROUP BY orig_product_name, corrected_product_name
-     * ORDER BY selection_count DESC</pre>
-     */
     @Override
     public List<REFFeedbackBrandCorrectionCountDto> findAliasCandidateCountsByOriginalName(
             String originalProductName) {
@@ -190,7 +171,6 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .where(
                         rEFRecognitionFeedback.originalSnapshot.productName.eq(originalProductName),
                         rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED),
-                        // correctedProductName이 null인 행 제외 (제품명 변경 없는 피드백)
                         rEFRecognitionFeedback.userCorrection.correctedProductName.isNotNull()
                 )
                 .groupBy(
@@ -201,18 +181,6 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 .fetch();
     }
 
-    /**
-     * 원본 식재료명 기준으로 수정 식재료명별 선택 횟수를 집계합니다.
-     * 실행 쿼리: 1개 (GROUP BY + COUNT)
-     * <pre>
-     * SELECT orig_grocery_item_name, corrected_grocery_item_name, COUNT(*) as selection_count
-     * FROM ref_recognition_feedback
-     * WHERE orig_grocery_item_name = :originalGroceryItemName
-     * AND status = 'C'
-     * AND corrected_grocery_item_name IS NOT NULL
-     * GROUP BY orig_grocery_item_name, corrected_grocery_item_name
-     * ORDER BY selection_count DESC</pre>
-     */
     @Override
     public List<REFFeedbackGroceryItemMappingCountDto> findGroceryItemMappingCountsByOriginalName(
             String originalGroceryItemName) {
@@ -237,6 +205,65 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
                 )
                 .orderBy(rEFRecognitionFeedback.id.value.count().desc())
                 .fetch();
+    }
+
+    /**
+     * 특정 원본 제품명에 대해 APPROVED 상태인 피드백 수를 조회합니다.
+     *
+     * <p>
+     * Redis alias 후보 Hash의 {@code __total__} 복원 시 CORRECTED 합계에 더해
+     * Gate 2 비율이 과대 계산되는 문제를 방지합니다.
+     * </p>
+     *
+     * 실행 쿼리: 1개
+     * <pre>
+     * SELECT COUNT(*) FROM ref_recognition_feedback
+     * WHERE orig_product_name = :originalProductName
+     * AND status = 'A'
+     * </pre>
+     */
+    @Override
+    public long countApprovedByOriginalProductName(String originalProductName) {
+        if (originalProductName == null || originalProductName.isBlank()) return 0L;
+        Long result = queryFactory
+                .select(rEFRecognitionFeedback.id.value.count())
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.productName.eq(originalProductName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.APPROVED)
+                )
+                .fetchOne();
+        return result != null ? result : 0L;
+    }
+
+    /**
+     * 특정 원본 식재료명에 대해 APPROVED 상태인 피드백 수를 조회합니다.
+     *
+     * <p>
+     * Redis grocery-item-correction 후보 Hash의 {@code __total__} 복원 시 CORRECTED 합계에 더해
+     * Gate 2 비율이 과대 계산되는 문제를 방지합니다.
+     * </p>
+     *
+     * 실행 쿼리: 1개
+     * <pre>
+     * SELECT COUNT(*) FROM ref_recognition_feedback
+     * WHERE orig_grocery_item_name = :originalGroceryItemName
+     * AND status = 'A'
+     * </pre>
+     */
+    @Override
+    public long countApprovedByOriginalGroceryItemName(String originalGroceryItemName) {
+        if (originalGroceryItemName == null || originalGroceryItemName.isBlank()) return 0L;
+        Long result = queryFactory
+                .select(rEFRecognitionFeedback.id.value.count())
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.groceryItemName
+                                .eq(originalGroceryItemName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.APPROVED)
+                )
+                .fetchOne();
+        return result != null ? result : 0L;
     }
 
     /* ──────────────────── Projection 빌더 ──────────────────── */
