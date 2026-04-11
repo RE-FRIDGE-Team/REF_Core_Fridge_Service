@@ -266,6 +266,78 @@ public class REFRecognitionFeedbackRepositoryImpl implements REFRecognitionFeedb
         return result != null ? result : 0L;
     }
 
+    /**
+     * 특정 원본 브랜드에 대해 사용자가 교체 입력한 브랜드별 집계를 반환합니다.
+     * <p>
+     * CORRECTED 상태이면서 {@code orig_brand_name}이 일치하고
+     * {@code corrected_brand_name}이 null이 아닌 피드백을
+     * {@code corrected_brand_name} 기준으로 GROUP BY하여 횟수 내림차순 반환합니다.
+     * </p>
+     *
+     * 실행 쿼리: 1개
+     * <pre>
+     * SELECT orig_brand_name, corrected_brand_name, COUNT(*) AS selectionCount
+     * FROM ref_recognition_feedback
+     * WHERE orig_brand_name = :originalBrandName
+     *   AND status = 'C'
+     *   AND corrected_brand_name IS NOT NULL
+     * GROUP BY orig_brand_name, corrected_brand_name
+     * ORDER BY selectionCount DESC
+     * </pre>
+     */
+    @Override
+    public List<REFFeedbackBrandCorrectionCountByOriginalDto> findBrandCorrectionCountsByOriginalBrand(
+            String originalBrandName) {
+        if (originalBrandName == null || originalBrandName.isBlank()) return List.of();
+        return queryFactory
+                .select(Projections.constructor(
+                        REFFeedbackBrandCorrectionCountByOriginalDto.class,
+                        rEFRecognitionFeedback.originalSnapshot.brandName,
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName,
+                        rEFRecognitionFeedback.id.value.count()
+                ))
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.brandName.eq(originalBrandName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.CORRECTED),
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName.isNotNull()
+                )
+                .groupBy(
+                        rEFRecognitionFeedback.originalSnapshot.brandName,
+                        rEFRecognitionFeedback.userCorrection.correctedBrandName
+                )
+                .orderBy(rEFRecognitionFeedback.id.value.count().desc())
+                .fetch();
+    }
+
+    /**
+     * 특정 원본 브랜드명에 대해 APPROVED 상태인 피드백 수를 조회합니다.
+     * <p>
+     * 트랙 2 Redis miss 복원 시 {@code __total__}을 정확히 재구성하기 위해
+     * CORRECTED 합계와 합산합니다. APPROVED가 누락되면 Gate 2 비율이 과대 계산됩니다.
+     * </p>
+     *
+     * 실행 쿼리: 1개
+     * <pre>
+     * SELECT COUNT(*) FROM ref_recognition_feedback
+     * WHERE orig_brand_name = :originalBrandName
+     * AND status = 'A'
+     * </pre>
+     */
+    @Override
+    public long countApprovedByOriginalBrandName(String originalBrandName) {
+        if (originalBrandName == null || originalBrandName.isBlank()) return 0L;
+        Long result = queryFactory
+                .select(rEFRecognitionFeedback.id.value.count())
+                .from(rEFRecognitionFeedback)
+                .where(
+                        rEFRecognitionFeedback.originalSnapshot.brandName.eq(originalBrandName),
+                        rEFRecognitionFeedback.status.eq(REFFeedbackStatus.APPROVED)
+                )
+                .fetchOne();
+        return result != null ? result : 0L;
+    }
+
     /* ──────────────────── Projection 빌더 ──────────────────── */
 
     private com.querydsl.core.types.ConstructorExpression<REFFeedbackDetailDto> detailProjection() {
