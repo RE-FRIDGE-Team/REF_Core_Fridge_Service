@@ -49,10 +49,16 @@ import java.time.Duration;
  * </p>
  *
  * <h4>3. Redis TTL 관리 정책</h4>
+ * <p>
+ * 긍정 피드백 발생 시 아래 Hash들의 {@code __total__}을 +1하고 TTL을 30일로 갱신합니다.
+ * "이 사용자는 해당 인식 결과에 이의 없이 승인했다"는 신호로, 각 핸들러의 Gate 2 분모(total)를
+ * 올바르게 유지하여 소수 악용 수정본의 성급한 확정을 방어합니다.
+ * </p>
  * <ul>
- * <li><b>대상:</b> alias 후보 Hash ({@code feedback:product-alias:{name}})
- *     및 식재료명 교정 후보 Hash ({@code feedback:grocery-item-correction:{name}})</li>
- * <li><b>갱신:</b> 긍정 피드백 발생 시 두 Hash 모두 TTL을 {@code CANDIDATE_TTL}(30일)로 연장합니다.</li>
+ *   <li>{@code feedback:product-alias:{productName}} — alias 후보 Hash {@code __total__}</li>
+ *   <li>{@code feedback:grocery-item-correction:{groceryItemName}} — 식재료명 교정 Hash {@code __total__}</li>
+ *   <li>{@code feedback:brand-correction:{brandName}} — 브랜드 교체 방어 Hash {@code __total__}</li>
+ *   <li>{@code feedback:category-reassignment:{categoryPath}} — 카테고리 outlier 차단 Hash {@code __total__}</li>
  * </ul>
  *
  * <h4>4. 비식재료 반려 묵인 신호 집계</h4>
@@ -62,6 +68,8 @@ import java.time.Duration;
  * 이 신호를 {@link REFExclusionRemovalRedisCounter#incrementAccept}로 집계하여
  * {@link REFExclusionRemovalPolicy}의 Gate 2 (dispute 비율 계산)에 활용합니다.
  * 비식재료 반려 묵인이 많을수록 실제로 비식재료일 가능성이 높아 자동 제거가 억제됩니다.
+ * rejected 케이스에서는 브랜드/카테고리 {@code __total__}을 증가시키지 않습니다.
+ * 정상 매칭이 아니므로 "브랜드/카테고리가 맞다"는 신호가 될 수 없기 때문입니다.
  * </p>
  *
  * <h4>5. Redis 키 목록</h4>
@@ -70,6 +78,8 @@ import java.time.Duration;
  * <li><b>{@code feedback:registered:}</b> Product 등록 완료 플래그</li>
  * <li><b>{@code feedback:product-alias:}</b> 제품명 alias 후보 Hash ({@code __total__} 포함)</li>
  * <li><b>{@code feedback:grocery-item-correction:}</b> 식재료명 교정 후보 Hash ({@code __total__} 포함)</li>
+ * <li><b>{@code feedback:brand-correction:}</b> 브랜드 교체 방어 Hash ({@code __total__} 포함)</li>
+ * <li><b>{@code feedback:category-reassignment:}</b> 카테고리 outlier 차단 Hash ({@code __total__} 포함)</li>
  * <li><b>{@code feedback:exclusion-accept:}</b> 비식재료 반려 묵인 횟수</li>
  * </ul>
  *
@@ -91,23 +101,35 @@ public class REFPositiveFeedbackAggregationHandler {
     private final ApplicationEventPublisher eventPublisher;
     private final REFExclusionRemovalRedisCounter exclusionRemovalRedisCounter;
 
-    static final String POSITIVE_COUNTER_PREFIX = "feedback:positive:";
-    static final String REGISTERED_FLAG_PREFIX = "feedback:registered:";
-    private static final String ALIAS_CANDIDATE_PREFIX = "feedback:product-alias:";
+    // ── 키 접두사 ────────────────────────────────────────────────────────────
+
+    static final String POSITIVE_COUNTER_PREFIX  = "feedback:positive:";
+    static final String REGISTERED_FLAG_PREFIX   = "feedback:registered:";
+
+    private static final String ALIAS_CANDIDATE_PREFIX          = "feedback:product-alias:";
+    private static final String BRAND_CORRECTION_PREFIX         = "feedback:brand-correction:";
+    private static final String CATEGORY_REASSIGNMENT_PREFIX    = "feedback:category-reassignment:";
+
     private static final String ALIAS_TOTAL_FIELD = "__total__";
 
-    /** alias/교정 후보 Hash TTL — 30일간 활동 없으면 자동 만료 */
+    // ── TTL / 임계값 ─────────────────────────────────────────────────────────
+
+    /** alias/교정/브랜드/카테고리 후보 Hash 공통 TTL — 30일간 활동 없으면 자동 만료 */
     private static final Duration CANDIDATE_TTL = Duration.ofDays(30);
+
     private static final int COUNTER_QUICK_FILTER = REFProductRegistrationPolicy.MIN_POSITIVE;
+
+    // ── 이벤트 핸들러 ────────────────────────────────────────────────────────
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handle(REFPositiveFeedbackEvent event) {
         REFOriginalRecognitionSnapshot snapshot = event.snapshot();
         String productName = snapshot.getProductName();
 
-        // ── 비식재료 반려 묵인 신호 집계 ─────────────────────────────
+        // ── 비식재료 반려 묵인 신호 집계 ─────────────────────────────────────
         // rejected=true인 긍정 피드백 = "비식재료 반려됐지만 이의 없이 넘어감"
-        // REFExclusionRemovalPolicy Gate 2의 분모(accept)로 활용됨
+        // REFExclusionRemovalPolicy Gate 2의 분모(accept)로 활용됨.
+        // rejected 케이스는 정상 매칭이 아니므로 브랜드/카테고리 __total__은 증가시키지 않음.
         if (snapshot.isRejected()) {
             String rejectionKeyword = snapshot.getRejectionKeyword();
             if (rejectionKeyword != null && !rejectionKeyword.isBlank()) {
@@ -120,23 +142,36 @@ public class REFPositiveFeedbackAggregationHandler {
 
         if (productName == null || productName.isBlank()) return;
 
-        // Step 1: 이미 등록된 제품 → alias/교정 __total__ 갱신 후 early return
+        // ── Step 1: 이미 등록된 제품 — 4개 Hash __total__ 갱신 후 early return ──
+        // Product 등록 여부와 무관하게 브랜드/카테고리 투표 집계는 계속되어야 합니다.
         if (isAlreadyRegistered(productName)) {
             log.debug("[긍정 피드백] 이미 등록된 제품, 스킵. productName='{}'", productName);
             incrementAliasTotalWithTtl(productName);
             incrementCorrectionTotalWithTtl(snapshot.getGroceryItemName());
+            incrementBrandCorrectionTotalWithTtl(snapshot.getBrandName());
+            incrementCategoryReassignmentTotalWithTtl(snapshot.getCategoryPath());
             return;
         }
 
-        // Step 2: alias __total__ +1 + TTL 갱신
+        // ── Step 2: alias __total__ +1 + TTL 갱신 ───────────────────────────
         incrementAliasTotalWithTtl(productName);
 
-        // Step 3: 식재료명 교정 __total__ +1 + TTL 갱신
+        // ── Step 3: 식재료명 교정 __total__ +1 + TTL 갱신 ───────────────────
         // 긍정 피드백도 "이 식재료 인식이 맞다"는 반응이므로
         // Gate 2 분모(__total__)에 포함되어 소수 악용 수정본의 확정을 방어
         incrementCorrectionTotalWithTtl(snapshot.getGroceryItemName());
 
-        // Step 4: Product 등록 카운터 increment
+        // ── Step 4: 브랜드 교체 방어 __total__ +1 + TTL 갱신 ───────────────
+        // "이 사용자는 원본 브랜드에 이의 없이 승인했다"
+        // → REFBrandImprovementHandler 트랙 2 Gate 2 분모 증가
+        incrementBrandCorrectionTotalWithTtl(snapshot.getBrandName());
+
+        // ── Step 5: 카테고리 outlier 차단 __total__ +1 + TTL 갱신 ───────────
+        // "이 사용자는 원본 카테고리에 이의 없이 승인했다"
+        // → REFCategoryReassignmentHandler outlier 비율 분모 증가
+        incrementCategoryReassignmentTotalWithTtl(snapshot.getCategoryPath());
+
+        // ── Step 6: Product 등록 카운터 increment ────────────────────────────
         String counterKey = POSITIVE_COUNTER_PREFIX + productName;
         Long currentCount = redisTemplate.opsForValue().increment(counterKey);
 
@@ -150,9 +185,11 @@ public class REFPositiveFeedbackAggregationHandler {
 
         if (currentCount < COUNTER_QUICK_FILTER) return;
 
-        // Step 5: DB 집계 + 정책 검증
+        // ── Step 7: DB 집계 + 정책 검증 ─────────────────────────────────────
         checkAndPublishEvent(snapshot, productName);
     }
+
+    // ── Product 등록 ─────────────────────────────────────────────────────────
 
     /**
      * DB에서 피드백 집계를 조회하여 등록 조건 충족 여부를 판단하고,
@@ -176,6 +213,8 @@ public class REFPositiveFeedbackAggregationHandler {
                 productName, registrationPolicy.calculateScore(aggregation));
     }
 
+    // ── __total__ 증가 메서드 ─────────────────────────────────────────────────
+
     /**
      * 제품명 alias 후보 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
      */
@@ -195,7 +234,7 @@ public class REFPositiveFeedbackAggregationHandler {
      * 식재료명 교정 후보 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
      *
      * <p>
-     * {@link REFGroceryItemMappingHandler}가 관리하는 Hash의 분모를 올바르게 유지합니다.
+     * {@link REFGroceryItemCorrectionService}가 관리하는 Hash의 분모를 올바르게 유지합니다.
      * groceryItemName이 null이거나 공백이면 조용히 스킵합니다.
      * </p>
      */
@@ -212,6 +251,56 @@ public class REFPositiveFeedbackAggregationHandler {
                     groceryItemName, e.getMessage());
         }
     }
+
+    /**
+     * 브랜드 교체 방어 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
+     *
+     * <p>
+     * "이 사용자는 원본 브랜드에 이의 없이 승인했다"는 신호입니다.
+     * {@code REFBrandImprovementHandler} 트랙 2의 Gate 2 분모({@code __total__})를 올바르게 유지하여
+     * 소수의 브랜드 교체 요청이 성급하게 반영되는 것을 방어합니다.
+     * originalBrandName이 null이거나 공백이면 조용히 스킵합니다.
+     * </p>
+     *
+     * @param originalBrandName 원본 인식 브랜드명 ({@code snapshot.getBrandName()})
+     */
+    private void incrementBrandCorrectionTotalWithTtl(String originalBrandName) {
+        if (originalBrandName == null || originalBrandName.isBlank()) return;
+        try {
+            String hashKey = BRAND_CORRECTION_PREFIX + originalBrandName;
+            redisTemplate.opsForHash().increment(hashKey, ALIAS_TOTAL_FIELD, 1);
+            redisTemplate.expire(hashKey, CANDIDATE_TTL);
+        } catch (Exception e) {
+            log.warn("[긍정 피드백] 브랜드 교체 __total__ 증가 실패. originalBrandName='{}', 사유: {}",
+                    originalBrandName, e.getMessage());
+        }
+    }
+
+    /**
+     * 카테고리 outlier 차단 Hash의 {@code __total__} 값을 1 증가시키고 TTL을 갱신합니다.
+     *
+     * <p>
+     * "이 사용자는 원본 카테고리에 이의 없이 승인했다"는 신호입니다.
+     * {@code REFCategoryReassignmentHandler}의 outlier 비율 분모({@code __total__})를 올바르게 유지하여
+     * 소수의 카테고리 수정 요청이 검수 큐에 노출되지 않도록 차단합니다.
+     * originalCategoryPath가 null이거나 공백이면 조용히 스킵합니다.
+     * </p>
+     *
+     * @param originalCategoryPath 원본 인식 카테고리 경로 ({@code snapshot.getCategoryPath()})
+     */
+    private void incrementCategoryReassignmentTotalWithTtl(String originalCategoryPath) {
+        if (originalCategoryPath == null || originalCategoryPath.isBlank()) return;
+        try {
+            String hashKey = CATEGORY_REASSIGNMENT_PREFIX + originalCategoryPath;
+            redisTemplate.opsForHash().increment(hashKey, ALIAS_TOTAL_FIELD, 1);
+            redisTemplate.expire(hashKey, CANDIDATE_TTL);
+        } catch (Exception e) {
+            log.warn("[긍정 피드백] 카테고리 재분류 __total__ 증가 실패. originalCategoryPath='{}', 사유: {}",
+                    originalCategoryPath, e.getMessage());
+        }
+    }
+
+    // ── 내부 유틸 ─────────────────────────────────────────────────────────────
 
     /**
      * 제품명이 이미 등록된 경우를 판단합니다.
