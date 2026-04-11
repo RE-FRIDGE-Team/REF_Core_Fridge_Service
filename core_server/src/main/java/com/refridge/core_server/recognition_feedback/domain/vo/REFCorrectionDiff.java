@@ -93,6 +93,61 @@ public class REFCorrectionDiff {
     }
 
     /**
+     * confirmedFields는 '파이프라인이 이 필드를 올바르게 판단했다'는 사용자의 암묵적 동의를 의미한다.
+     * <p>
+     * 원본에 값이 없었던 필드는 포함하지 않는다. 값이 없었는데 수정도 안 했으면
+     * '맞았다'가 아니라 '판단 자체를 안 했다'이기 때문이다.
+     * <p>
+     * 이 Set은 {@code REFImplicitPositiveFeedbackHandler}에서 해당 필드를 관리하는
+     * 각 핸들러의 <b>total</b> 분모를 올리는 데 사용된다.
+     * <p>
+     * {@link REFCorrectionType#REJECTED_BUT_FOOD}는 암묵적 긍정의 개념에 해당하지 않으므로
+     * 절대 포함하지 않는다.
+     *
+     * @param snapshot 원본 인식 결과 스냅샷
+     * @param diff     이미 계산된 {@link REFCorrectionDiff}
+     * @return 사용자가 수정하지 않았고 원본에 값이 존재했던 필드들의 {@link REFCorrectionType} Set
+     */
+    public static Set<REFCorrectionType> calculateConfirmedFields(
+            REFOriginalRecognitionSnapshot snapshot,
+            REFCorrectionDiff diff) {
+
+        Set<REFCorrectionType> confirmed = EnumSet.noneOf(REFCorrectionType.class);
+
+        if (!diff.productNameChanged
+                && snapshot.getProductName() != null
+                && !snapshot.getProductName().isBlank()) {
+            confirmed.add(REFCorrectionType.PRODUCT_NAME);
+        }
+
+        if (!diff.groceryItemChanged
+                && snapshot.getGroceryItemName() != null
+                && !snapshot.getGroceryItemName().isBlank()) {
+            confirmed.add(REFCorrectionType.GROCERY_ITEM);
+        }
+
+        if (!diff.categoryChanged
+                && snapshot.getCategoryPath() != null
+                && !snapshot.getCategoryPath().isBlank()) {
+            confirmed.add(REFCorrectionType.CATEGORY);
+        }
+
+        if (!diff.brandChanged
+                && snapshot.getBrandName() != null
+                && !snapshot.getBrandName().isBlank()) {
+            confirmed.add(REFCorrectionType.BRAND);
+        }
+
+        if (!diff.quantityOrVolumeChanged
+                && (snapshot.getQuantity() != null
+                || (snapshot.getVolume() != null && !snapshot.getVolume().isBlank()))) {
+            confirmed.add(REFCorrectionType.QUANTITY_VOLUME);
+        }
+
+        return confirmed;
+    }
+
+    /**
      * 변경된 필드가 하나도 없는지 확인합니다.
      * 가격만 입력한 경우 등에서 true를 반환할 수 있습니다.
      */
