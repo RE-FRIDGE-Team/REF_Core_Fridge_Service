@@ -4,6 +4,7 @@ import com.refridge.core_server.product_recognition.domain.REFRecognitionDiction
 import com.refridge.core_server.product_recognition.domain.ar.REFRecognitionDictionary;
 import com.refridge.core_server.product_recognition.domain.event.REFDictionarySyncedEvent;
 import com.refridge.core_server.product_recognition.domain.vo.REFRecognitionDictionaryType;
+import com.refridge.core_server.product_recognition.infra.sync.REFDictionarySyncEventHandler;
 import com.refridge.core_server.product_recognition.infra.sync.REFRecognitionDictionaryRedisSync;
 import com.refridge.core_server.recognition_feedback.domain.event.REFNegativeFeedbackEvent;
 import com.refridge.core_server.recognition_feedback.domain.port.REFGroceryItemExistencePort;
@@ -18,6 +19,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 비식재료로 반려되었으나 사용자가 식재료로 수정한 피드백을 처리합니다.
@@ -47,18 +50,24 @@ import org.springframework.transaction.annotation.Transactional;
  *     └─ [Step 5] 자동 제거 실행
  *                   → REFRecognitionDictionary.removeEntry(rejectionKeyword)   [DB]
  *                   → REFRecognitionDictionaryRedisSync.sync()                 [Redis Set]
- *                   → REFDictionarySyncedEvent(EXCLUSION)                      [Trie 재빌드]
+ *                   → TransactionSynchronization.afterCommit() 등록            [커밋 후]
+ *                       → REFDictionarySyncedEvent(EXCLUSION)                  [Trie 재빌드]
  *                   → Redis 카운터 초기화
  *                   → 감사 로그용 검수 항목 적재 (contextDetail에 [AUTO_REMOVED] 마킹)
  * </pre>
  *
- * <h3>Gate 3 이분화 설계 의도</h3>
+ * <h3>Trie 재빌드 타이밍 — 커밋 후 분리 (이슈 1.2 수정)</h3>
  * <p>
- * 예시: "평평 국수"에서 "평평"이 비식재료 키워드, 사용자가 "국수"로 정정했으나
- * GroceryItem DB에 국수가 없는 경우.<br>
- * 이 케이스는 사용자 실수가 아니라 비식재료 키워드 오등록 + GroceryItem 미등록이
- * 동시에 발생한 신호입니다. 두 검수 항목을 함께 적재하면 관리자가 한 화면에서
- * 두 문제를 연계하여 판단할 수 있습니다.
+ * 기존에는 {@code REQUIRES_NEW} 트랜잭션 내에서 {@code eventPublisher.publishEvent()}를
+ * 즉시 호출하여 동기 {@code @EventListener}인 {@link REFDictionarySyncEventHandler}가
+ * 같은 트랜잭션 안에서 Trie를 재빌드했습니다.
+ * 이 경우 트랜잭션 롤백 시 DB 키워드 삭제는 원복되지만 Trie는 이미 변경되어
+ * DB ↔ Trie 불일치가 발생할 수 있습니다.
+ * </p>
+ * <p>
+ * 수정 후에는 {@link TransactionSynchronizationManager#registerSynchronization}을 통해
+ * {@link TransactionSynchronization#afterCommit()} 콜백에서만 이벤트를 발행합니다.
+ * 트랜잭션이 성공적으로 커밋된 경우에만 Trie가 재빌드되어 DB와의 일관성이 보장됩니다.
  * </p>
  *
  * <h3>트랜잭션 경계</h3>
@@ -169,7 +178,6 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
     private Gate3Result evaluateGate3(REFNegativeFeedbackEvent event,
                                       String rejectionKeyword,
                                       String correctedGroceryItemName) {
-        // 유효성 검사: null/공백/길이 초과/특수문자만으로 구성
         if (!isValidGroceryItemName(correctedGroceryItemName)) {
             log.info("[비식재료 사전] Gate 3 실패 — 유효하지 않은 식재료명. " +
                     "keyword='{}', correctedName='{}'", rejectionKeyword, correctedGroceryItemName);
@@ -177,15 +185,12 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
             return Gate3Result.INVALID_INPUT;
         }
 
-        // GroceryItem DB 존재 확인
         if (groceryItemExistencePort.existsByName(correctedGroceryItemName)) {
             log.debug("[비식재료 사전] Gate 3 통과. keyword='{}', correctedName='{}'",
                     rejectionKeyword, correctedGroceryItemName);
             return Gate3Result.PASS;
         }
 
-        // 유효하지만 DB에 없는 케이스 — 비식재료 오등록 + GroceryItem 미등록 동시 신호
-        // 관리자가 두 검수 항목을 연계하여 판단할 수 있도록 함께 적재
         log.info("[비식재료 사전] Gate 3 — 유효한 식재료명이나 DB 미등록. " +
                 "EXCLUSION_REMOVAL + NEW_GROCERY_ITEM 동시 적재. " +
                 "keyword='{}', correctedName='{}'", rejectionKeyword, correctedGroceryItemName);
@@ -198,13 +203,6 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
 
     /**
      * 식재료명이 유효한지 기초 검사를 수행합니다.
-     *
-     * <p>아래 조건 중 하나라도 해당하면 유효하지 않은 입력으로 간주합니다.</p>
-     * <ul>
-     *   <li>null 또는 공백</li>
-     *   <li>{@link #MAX_GROCERY_ITEM_NAME_LENGTH}(15자) 초과</li>
-     *   <li>한글·영문·숫자가 하나도 없는 경우 (특수문자만 구성)</li>
-     * </ul>
      */
     private boolean isValidGroceryItemName(String name) {
         if (name == null || name.isBlank()) return false;
@@ -222,7 +220,8 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
      *   <li>EXCLUSION 사전 조회 (없으면 경고 후 검수 큐 폴백)</li>
      *   <li>DB entry 제거 ({@code removeEntry})</li>
      *   <li>Redis Set 동기화 ({@code sync})</li>
-     *   <li>Trie 재빌드 트리거 ({@code REFDictionarySyncedEvent})</li>
+     *   <li>커밋 후 Trie 재빌드 트리거 — {@link TransactionSynchronization#afterCommit()} 등록
+     *       (트랜잭션 롤백 시 Trie 변경 방지)</li>
      *   <li>Redis 카운터 초기화</li>
      *   <li>감사 로그용 검수 항목 적재 ([AUTO_REMOVED] 마킹)</li>
      * </ol>
@@ -244,7 +243,6 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
         }
 
         if (!exclusionDict.hasEntry(rejectionKeyword)) {
-            // 이미 제거된 경우 — 멱등 처리
             log.warn("[비식재료 사전] 키워드가 이미 사전에 없음 (이미 제거됨?). keyword='{}'",
                     rejectionKeyword);
             redisCounter.resetCounters(rejectionKeyword);
@@ -256,8 +254,22 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
 
         redisSync.sync(exclusionDict);
 
-        eventPublisher.publishEvent(
-                new REFDictionarySyncedEvent(REFRecognitionDictionaryType.EXCLUSION));
+        // [수정 1.2] eventPublisher.publishEvent()를 트랜잭션 커밋 후로 분리.
+        // 기존 코드에서는 동기 @EventListener인 REFDictionarySyncEventHandler가
+        // 같은 REQUIRES_NEW 트랜잭션 안에서 Trie를 재빌드했습니다.
+        // 트랜잭션 롤백 시 DB는 원복되지만 Trie는 이미 변경된 채로 남아 불일치가 발생했습니다.
+        // afterCommit()에서만 이벤트를 발행하여 DB ↔ Trie 일관성을 보장합니다.
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        eventPublisher.publishEvent(
+                                new REFDictionarySyncedEvent(REFRecognitionDictionaryType.EXCLUSION));
+                        log.info("[비식재료 사전] 커밋 후 Trie 재빌드 이벤트 발행. keyword='{}'",
+                                rejectionKeyword);
+                    }
+                }
+        );
 
         redisCounter.resetCounters(rejectionKeyword);
 
@@ -271,11 +283,6 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
 
     /* ──────────────────── 검수 큐 적재 ──────────────────── */
 
-    /**
-     * EXCLUSION_REMOVAL 검수 항목을 적재합니다.
-     *
-     * @param autoRemoved {@code true}이면 contextDetail에 {@code [AUTO_REMOVED]} 마킹
-     */
     private void enqueueExclusionReview(REFNegativeFeedbackEvent event,
                                         String rejectionKeyword,
                                         String correctedGroceryItemName,
@@ -308,18 +315,6 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
                 rejectionKeyword, autoRemoved, event.feedbackId().getValue());
     }
 
-    /**
-     * NEW_GROCERY_ITEM 검수 항목을 적재합니다.
-     *
-     * <p>
-     * Gate 3에서 "유효하지만 DB에 없는" 케이스에서만 호출됩니다.
-     * contextDetail에 연관된 비식재료 키워드를 포함하여
-     * 관리자가 EXCLUSION_REMOVAL 검수 항목과 연계할 수 있도록 합니다.
-     * </p>
-     *
-     * @param correctedGroceryItemName 등록 후보 식재료명
-     * @param relatedExclusionKeyword  함께 적재된 EXCLUSION_REMOVAL 대상 키워드
-     */
     private void enqueueNewGroceryItemReview(REFNegativeFeedbackEvent event,
                                              String correctedGroceryItemName,
                                              String relatedExclusionKeyword) {
@@ -339,7 +334,7 @@ public class REFExclusionRemovalHandler implements REFImprovementActionHandler {
                                         correctedGroceryItemName,
                                         context,
                                         event.feedbackId().getValue(),
-                                        "ExclusionFilter"   // sourceHandlerName
+                                        "ExclusionFilter"
                                 )
                         )
                 );
