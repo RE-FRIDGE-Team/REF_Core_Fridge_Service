@@ -34,6 +34,8 @@ import java.util.Map;
  *   │
  *   └─▶ handle(event)
  *         │
+ *         ├─ [Guard] REJECTED_BUT_FOOD 동시 트리거 시 조기 리턴 (이슈 2.3)
+ *         │
  *         ├─ [Step 1] incrementCandidateCounts()
  *         │     ├─ Redis HINCR: correctedGroceryItemName 선택 횟수 +1
  *         │     └─ Redis HINCR: __total__ +1
@@ -42,6 +44,7 @@ import java.util.Map;
  *         │     └─ occurrenceCount == 1?
  *         │           ├─ Case A (첫 피드백): DB 비어있음 → 그대로 진행
  *         │           └─ Case B (TTL 만료):  DB 이력 존재 → Hash 전체 복원
+ *         │                 __total__ = CORRECTED 합계 + APPROVED 합계 (이슈 2.2)
  *         │
  *         ├─ [Step 3] TTL 갱신 (30일)
  *         │
@@ -54,6 +57,16 @@ import java.util.Map;
  *               │           └─ DB 저장 + Redis 반영 + 이벤트 발행
  *               └─ 미달 + CONFIRMED → reopenCorrection()
  * </pre>
+ *
+ * <h3>REJECTED_BUT_FOOD 동시 트리거 방지 (이슈 2.3)</h3>
+ * <p>
+ * REJECTED 상태 인식 결과에 대해 사용자가 {@code correctedGroceryItemName}을 입력하면
+ * {@code changedFields}에 {@code REJECTED_BUT_FOOD}와 {@code GROCERY_ITEM}이 동시에 추가됩니다.
+ * 이 경우 {@link REFExclusionRemovalHandler}가 이미 NEW_GROCERY_ITEM 검수 큐를 적재했으므로,
+ * 이 핸들러까지 동일 {@code correctedGroceryItemName}으로 검수 큐를 적재하면
+ * {@code occurrenceCount}가 실제보다 1 과대 집계됩니다.
+ * handle() 진입부에서 {@code isRejectedButFood()} guard를 추가하여 중복 처리를 방지합니다.
+ * </p>
  *
  * <h3>Redis 데이터 구조</h3>
  * <pre>
@@ -93,6 +106,15 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
 
     @Override
     public void handle(REFNegativeFeedbackEvent event) {
+        // REJECTED_BUT_FOOD와 GROCERY_ITEM이 동시에 changedFields에 추가되는 케이스 방지.
+        // REFExclusionRemovalHandler가 이미 NEW_GROCERY_ITEM 검수 큐를 적재하고 카운터를 처리했으므로
+        // 이 핸들러에서 중복 처리하면 occurrenceCount가 실제보다 1 과대 집계됩니다.
+        if (event.diff().isRejectedButFood()) {
+            log.debug("[식재료명 교정] REJECTED_BUT_FOOD 동시 트리거 — ExclusionRemovalHandler가 이미 처리. " +
+                    "feedbackId={}", event.feedbackId().getValue());
+            return;
+        }
+
         String originalGroceryItem = event.snapshot().getGroceryItemName();
         String correctedGroceryItem = event.correction().getCorrectedGroceryItemName();
         String completedBy = event.snapshot().getCompletedBy();
@@ -127,8 +149,6 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
 
     /**
      * Redis Hash에 수정본 선택 횟수와 전체 반응 횟수를 각각 1씩 증가시킵니다.
-     *
-     * @return 증가 후 현재 카운트. Redis 장애 시 {@code null} 반환
      */
     private CandidateCounts incrementCandidateCounts(String hashKey, String correctedGroceryItem) {
         Long occurrenceCount = redisTemplate.opsForHash()
@@ -152,24 +172,25 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
      *   <li><b>Case A (진짜 첫 피드백):</b> DB가 비어있음 → 복원 없이 그대로 반환</li>
      *   <li><b>Case B (TTL 만료 후 재진입):</b> DB에 이전 이력 존재 → Hash 전체 복원 후 반환</li>
      * </ul>
+     *
+     * <h3>[이슈 2.2 수정] __total__ 복원 시 APPROVED 합산</h3>
      * <p>
-     * {@code occurrenceCount >= 2}이면 Redis 살아있는 정상 케이스이므로 DB를 조회하지 않습니다.
+     * 기존에는 {@code __total__}을 CORRECTED 피드백 합계로만 복원했습니다.
+     * 수정 후에는 APPROVED(긍정 피드백) 건수도 조회하여 합산함으로써
+     * Gate 2 비율의 과대 계산 문제를 해결합니다.
      * </p>
      */
     private CandidateCounts restoreFromDbIfMiss(String hashKey,
                                                 String originalGroceryItem,
                                                 String correctedGroceryItem,
                                                 CandidateCounts counts) {
-        // occurrenceCount >= 2이면 Redis 살아있는 정상 케이스 — DB 조회 불필요
         if (counts.occurrenceCount() != 1) return counts;
 
         List<REFFeedbackGroceryItemMappingCountDto> dbCounts =
                 feedbackRepository.findGroceryItemMappingCountsByOriginalName(originalGroceryItem);
 
-        // Case A: 진짜 첫 피드백
         if (dbCounts.isEmpty()) return counts;
 
-        // Case B: TTL 만료 후 재진입 → DB 데이터로 Hash 전체 복원
         long dbTotal = 0L;
         for (REFFeedbackGroceryItemMappingCountDto dto : dbCounts) {
             redisTemplate.opsForHash().put(
@@ -180,46 +201,42 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
             dbTotal += dto.selectionCount();
         }
 
-        // __total__을 DB 집계값으로 복원
-        // 긍정 피드백 분은 REFPositiveFeedbackAggregationHandler가 이후 자연스럽게 재누적
+        // [수정 2.2] APPROVED(긍정 피드백) 건수를 __total__에 합산하여 Gate 2 비율 정확성 보장.
+        // 기존: __total__ = CORRECTED 합계 → 긍정 피드백 누락으로 비율 과대 계산
+        // 수정: __total__ = CORRECTED 합계 + APPROVED 합계
+        long approvedCount = feedbackRepository.countApprovedByOriginalGroceryItemName(originalGroceryItem);
+        long restoredTotal = dbTotal + approvedCount;
+
         redisTemplate.opsForHash().put(
                 hashKey,
                 REFGroceryItemCorrectionService.TOTAL_FIELD,
-                String.valueOf(dbTotal)
+                String.valueOf(restoredTotal)
         );
 
-        // 현재 처리 중인 correctedGroceryItem이 DB에 없으면 occurrenceCount는 1로 유지
         long restoredOccurrence = dbCounts.stream()
                 .filter(d -> correctedGroceryItem.equals(d.correctedGroceryItemName()))
                 .mapToLong(REFFeedbackGroceryItemMappingCountDto::selectionCount)
                 .findFirst()
                 .orElse(1L);
 
-        log.info("[식재료명 교정] Redis 복원. originalGroceryItem='{}', 후보수={}, total={}",
-                originalGroceryItem, dbCounts.size(), dbTotal);
+        log.info("[식재료명 교정] Redis 복원. originalGroceryItem='{}', 후보수={}, correctedTotal={}, " +
+                        "approvedCount={}, restoredTotal={}",
+                originalGroceryItem, dbCounts.size(), dbTotal, approvedCount, restoredTotal);
 
-        return new CandidateCounts(restoredOccurrence, dbTotal);
+        return new CandidateCounts(restoredOccurrence, restoredTotal);
     }
 
     /**
      * 3중 게이트를 검사하여 교정 확정 또는 reopen을 처리합니다.
-     *
-     * <h3>Gate 1 빠른 차단</h3>
-     * <p>
-     * HGETALL 비용을 피하기 위해 Gate 1을 먼저 검사합니다.
-     * Gate 1 통과 시에만 HGETALL을 실행합니다.
-     * </p>
      */
     private void evaluateAndConfirmCorrection(String hashKey,
                                               String originalGroceryItem,
                                               String correctedGroceryItem,
                                               CandidateCounts counts) {
-        // Gate 1 빠른 차단
         if (counts.occurrenceCount() < REFGroceryItemCorrectionService.MIN_CORRECTION_COUNT) {
             return;
         }
 
-        // Gate 1 통과 시에만 HGETALL 실행
         Map<String, Long> allCounts = correctionService.getAllCandidateCounts(hashKey);
 
         boolean meetsThreshold = correctionService.meetsConfirmationThreshold(
@@ -230,7 +247,6 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
         );
 
         if (meetsThreshold) {
-            // DB 저장 + Redis 반영 + 이벤트 발행
             correctionService.confirmCorrection(
                     originalGroceryItem,
                     correctedGroceryItem,
@@ -239,7 +255,6 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
             );
 
         } else if (correctionService.isConfirmed(originalGroceryItem)) {
-            // 경쟁 후보 재부상 → reopen
             correctionService.reopenCorrection(originalGroceryItem);
             log.info("[식재료명 교정] 경쟁 후보 재부상, reopen. originalGroceryItem='{}'",
                     originalGroceryItem);
@@ -250,10 +265,8 @@ public class REFGroceryItemMappingHandler implements REFImprovementActionHandler
      * 신규 식재료 후보를 검수 큐에 적재합니다.
      *
      * <p>
-     * 이미 동일한 {@code correctedGroceryItem}이 PENDING 상태로 존재하면
-     * {@code occurrenceCount}만 증가시킵니다 (중복 적재 방지).
-     * {@code sourceHandlerName}을 기록하여 관리자 승인 시
-     * MLPrediction 여부 판단에 활용합니다.
+     * 이미 동일한 {@code correctedGroceryItem}이 존재하면 {@code occurrenceCount}만 증가시킵니다.
+     * {@code sourceHandlerName}을 기록하여 관리자 승인 시 MLPrediction 여부 판단에 활용합니다.
      * </p>
      */
     private void enqueueForReview(REFNegativeFeedbackEvent event,
