@@ -10,34 +10,14 @@ import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.time.LocalDateTime;
 
-/**
- * 제품 집계 루트.
- * <pre>
- * 제품의 책임:
- * - 실제 유통되는 제품명 색인 (제품명 검색용)
- * - GroceryItem(식재료) 매핑 (분류용)
- * - 비정규화된 카테고리 참조 보관 ({@link REFGroceryItemReference})
- * </pre>
- *
- * <h3>카테고리 참조 비정규화</h3>
- * <p>
- * {@link REFGroceryItemReference}는 {@code groceryItemId}와 함께
- * {@code majorCategoryId}, {@code minorCategoryId}를 비정규화하여 보유합니다.
- * GroceryItem의 카테고리가 변경되면 {@link #updateCategoryReference}를 통해
- * 이 참조를 명시적으로 동기화해야 합니다.
- * </p>
- */
 @Entity
 @SuppressWarnings("NullableProblems")
 @Builder(access = AccessLevel.PROTECTED)
 @Table(name = "ref_product", indexes = {
-        // 완전 일치 + 상태 필터
         @Index(name = "idx_product_name_status",
                 columnList = "product_name, status"),
-        // 브랜드 + 제품명 복합
         @Index(name = "idx_product_brand_name_status",
                 columnList = "brand_name, product_name, status"),
-        // FK JOIN 최적화
         @Index(name = "idx_product_grocery_item_id",
                 columnList = "grocery_item_id")
 })
@@ -57,11 +37,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     )
     private Long id;
 
-    /**
-     * 정제된 제품명을 담고 있습니다.<pre>
-     * ex) "서울우유 멸균우유 200ml" -> "멸균우유"
-     * ex) "CJ 햇반 210g" -> "햇반"</pre>
-     */
     @Embedded
     private REFProductName productName;
 
@@ -76,6 +51,7 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     @Convert(converter = REFProductStatusConverter.class)
     private REFProductStatus status;
 
+    @Getter
     @Embedded
     private REFGroceryItemReference groceryItemReference;
 
@@ -85,7 +61,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
     @Embedded
     private REFEntityTimeMetaData timeMetaData;
 
-    /* JPA 생성 시점 콜백 - createdAt 자동 업데이트 */
     @PrePersist
     protected void onCreate() {
         if (timeMetaData == null) {
@@ -94,7 +69,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
         }
     }
 
-    /* JPA 수정 시점 콜백 - updatedAt 자동 업데이트 */
     @PreUpdate
     protected void onUpdate() {
         if (timeMetaData != null) {
@@ -103,10 +77,6 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
         }
     }
 
-    /**
-     * CSV 부트스트랩용 팩토리 메서드.
-     * productType: 일단 전부 GENERIC으로 적재, 추후 배치 보정 예정
-     */
     public static REFProduct create(
             String productName,
             String brandName,
@@ -127,17 +97,37 @@ public class REFProduct extends AbstractAggregateRoot<REFProduct> {
 
     /**
      * GroceryItem 카테고리 변경 시 Product의 비정규화된 카테고리 참조를 갱신합니다.
-     * <p>
-     * {@link REFGroceryItemReference}는 {@code majorCategoryId}와 {@code minorCategoryId}를
-     * 비정규화하여 보유합니다. 관리자가 카테고리 재분류를 승인하면
-     * GroceryItem과 Product의 카테고리 정보를 일관되게 유지합니다.
-     *
-     * @param newMajorCategoryId 새 대분류 카테고리 ID
-     * @param newMinorCategoryId 새 중분류 카테고리 ID
+     * 카테고리 재분류 승인 흐름에서 사용됩니다.
      */
     public void updateCategoryReference(Long newMajorCategoryId, Long newMinorCategoryId) {
         this.groceryItemReference = REFGroceryItemReference.of(
                 this.groceryItemReference.getGroceryItemId(),
+                newMajorCategoryId,
+                newMinorCategoryId
+        );
+    }
+
+    /**
+     * 식재료 교정으로 인해 Product의 GroceryItem 매핑 전체를 갱신합니다.
+     *
+     * <h3>추가 배경 (2026. 4. 14.)</h3>
+     * <p>
+     * 기존 {@link #updateCategoryReference}는 같은 GroceryItem 내에서
+     * 카테고리만 바뀌는 케이스를 처리합니다.
+     * 이 메서드는 GroceryItem 자체가 바뀌는 식재료 교정 케이스를 처리합니다.
+     * {@link com.refridge.core_server.product.application.REFProductLifeCycleService#upsertProduct}에서
+     * 동일 제품명에 GroceryItem이 달라진 경우 호출됩니다.
+     * </p>
+     *
+     * @param newGroceryItemId   교정된 GroceryItem ID
+     * @param newMajorCategoryId 교정된 GroceryItem의 대분류 카테고리 ID
+     * @param newMinorCategoryId 교정된 GroceryItem의 중분류 카테고리 ID
+     */
+    public void updateGroceryItemReference(Long newGroceryItemId,
+                                           Long newMajorCategoryId,
+                                           Long newMinorCategoryId) {
+        this.groceryItemReference = REFGroceryItemReference.of(
+                newGroceryItemId,
                 newMajorCategoryId,
                 newMinorCategoryId
         );
