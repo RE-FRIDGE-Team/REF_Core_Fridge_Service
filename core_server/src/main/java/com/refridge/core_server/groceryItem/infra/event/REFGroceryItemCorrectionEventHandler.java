@@ -52,6 +52,7 @@ public class REFGroceryItemCorrectionEventHandler {
                                         "correctedName='{}' (검수 큐에 이미 적재됨)",
                                 event.correctedName())
                 );
+        // correctedName이 DB에 없으면 검수 큐에 이미 적재된 상태이므로 추가 조치 불필요!!
     }
 
     /**
