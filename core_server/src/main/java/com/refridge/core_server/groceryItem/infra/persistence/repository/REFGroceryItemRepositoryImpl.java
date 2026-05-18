@@ -133,11 +133,6 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
     /**
      * 식재료 이름으로 GroceryItem 조회 (카테고리 경로 포함).
      * 실행 쿼리: 1개 (JOIN 2회)
-     * - GroceryItem → MajorCategory → MinorCategory
-     * - CategoryPath는 "대분류명 > 중분류명" 형식으로 조합
-     *
-     * @param groceryItemName 식재료 이름
-     * @return 식재료 정보 + 카테고리 경로
      */
     @Override
     public Optional<REFGroceryItemWithCategoryPathDto> findByGroceryItemName(String groceryItemName) {
@@ -150,7 +145,6 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                         REFGroceryItemWithCategoryPathDto.class,
                         rEFGroceryItem.id,
                         rEFGroceryItem.groceryItemName.value,
-                        // CategoryPath: "대분류명 > 중분류명" 형식으로 조합
                         Expressions.stringTemplate(
                                 "CONCAT({0}, {1}, {2})",
                                 rEFMajorGroceryCategory.categoryName.value,
@@ -160,10 +154,8 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                         rEFGroceryItem.representativeImage.presignedUrl
                 ))
                 .from(rEFGroceryItem)
-                // MajorCategory JOIN
                 .innerJoin(rEFMajorGroceryCategory)
                 .on(rEFMajorGroceryCategory.id.eq(rEFGroceryItem.groceryCategoryReference.majorCategoryId))
-                // MinorCategory JOIN
                 .innerJoin(rEFMinorGroceryCategory)
                 .on(rEFMinorGroceryCategory.id.eq(rEFGroceryItem.groceryCategoryReference.minorCategoryId))
                 .where(
@@ -208,10 +200,9 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                 .select(Projections.constructor(
                         REFGroceryItemItemTypeDto.class,
                         rEFGroceryItem.id,
-                        rEFMinorGroceryCategory.itemType   // REFInventoryItemType enum
+                        rEFMinorGroceryCategory.itemType
                 ))
                 .from(rEFGroceryItem)
-                // MinorCategory JOIN — minorCategoryId FK 기준
                 .innerJoin(rEFMinorGroceryCategory)
                 .on(rEFMinorGroceryCategory.id.eq(
                         rEFGroceryItem.groceryCategoryReference.minorCategoryId))
@@ -219,6 +210,67 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                         rEFGroceryItem.id.in(ids),
                         rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
                 )
+                .fetch();
+    }
+
+    /**
+     * fridge_server 노출용 메타데이터 단건 조회.
+     * <p>
+     * GroceryItem 본 테이블 + MinorCategory JOIN 1회로 itemType까지 가져옵니다.
+     * usageMetadata.* 필드는 @Embedded이므로 같은 row에 존재 → 추가 JOIN 없음.
+     * </p>
+     */
+    @Override
+    public Optional<REFGroceryItemMetadataDTO> findMetadataDTOById(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+
+        REFGroceryItemMetadataDTO result = jpaQueryFactory
+                .select(Projections.constructor(
+                        REFGroceryItemMetadataDTO.class,
+                        rEFGroceryItem.id,
+                        rEFGroceryItem.groceryItemName.value,
+                        rEFMinorGroceryCategory.itemType,
+                        rEFGroceryItem.usageMetadata.defaultUnit.stringValue(),
+                        rEFGroceryItem.usageMetadata.minPortionAmount,
+                        rEFGroceryItem.usageMetadata.maxPortionAmount,
+                        rEFGroceryItem.usageMetadata.spoonVolumeMl,
+                        rEFGroceryItem.usageMetadata.pieceWeightGram,
+                        rEFGroceryItem.usageMetadata.allowedUsageTypesCsv,
+                        rEFGroceryItem.usageMetadata.defaultUsageType.stringValue()
+                ))
+                .from(rEFGroceryItem)
+                .innerJoin(rEFMinorGroceryCategory)
+                .on(rEFMinorGroceryCategory.id.eq(
+                        rEFGroceryItem.groceryCategoryReference.minorCategoryId))
+                .where(
+                        rEFGroceryItem.id.eq(id),
+                        rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
+                )
+                .fetchOne();
+
+        return Optional.ofNullable(result);
+    }
+
+    /**
+     * 부트스트랩용 — 커서 기반 ID 페이징 조회.
+     * id 오름차순으로 afterId 이후 ACTIVE 항목들의 ID만 가져옵니다.
+     */
+    @Override
+    public List<Long> findActiveIdsAfter(Long afterId, int pageSize) {
+        Long cursor = (afterId == null) ? 0L : afterId;
+        int size = Math.max(1, pageSize);
+
+        return jpaQueryFactory
+                .select(rEFGroceryItem.id)
+                .from(rEFGroceryItem)
+                .where(
+                        rEFGroceryItem.id.gt(cursor),
+                        rEFGroceryItem.groceryItemStatus.eq(REFGroceryItemStatus.ACTIVE)
+                )
+                .orderBy(rEFGroceryItem.id.asc())
+                .limit(size)
                 .fetch();
     }
 }
