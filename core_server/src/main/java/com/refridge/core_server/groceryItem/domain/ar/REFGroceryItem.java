@@ -6,7 +6,6 @@ import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategor
 import com.refridge.core_server.groceryItem.domain.vo.*;
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemClassificationConverter;
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemStatusConverter;
-import com.refridge.core_server.grocery_category.domain.vo.REFInventoryItemType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.domain.AbstractAggregateRoot;
@@ -56,9 +55,8 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     private REFGroceryCategoryReference groceryCategoryReference;
 
     /**
-     * 사용량 환산 메타데이터 (defaultUnit, portion, spoonVolumeMl, pieceWeightGram,
-     * allowedUsageTypes, defaultUsageType).
-     * fridge_server의 요리(Cook) 기능에서 UsageSpec 환산 시 참조합니다.
+     * 사용량 환산 메타데이터.
+     * fridge_server의 요리(Cook) 기능에서 단위 환산 시 참조합니다.
      * 모든 필드가 nullable이며, 미설정 시 {@link REFGroceryItemUsageMetadata#empty()}로 초기화됩니다.
      */
     @Embedded
@@ -119,7 +117,8 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                 .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 카테고리 정보입니다."));
     }
 
-    /* BUSINESS LOGIC : 식재료의 카테고리를 변경할 수 있다. */
+    /* BUSINESS LOGIC */
+
     public void changeCategory(Long majorCategoryId, Long minorCategoryId,
                                REFGroceryItemCategoryValidateAndAdaptService categoryValidatorService) {
         if (isActive() && categoryValidatorService.isValidCategoryIds(majorCategoryId, minorCategoryId)) {
@@ -138,10 +137,6 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                 REFRepresentativeImage.of(representativeImageUrl) : this.representativeImage;
     }
 
-    /**
-     * BUSINESS LOGIC : 사용량 환산 메타데이터를 일괄 업데이트한다.
-     * 활성 상태인 경우에만 변경이 적용됩니다.
-     */
     public void updateUsageMetadata(REFGroceryItemUsageMetadata newMetadata) {
         if (isActive() && newMetadata != null) {
             this.usageMetadata = newMetadata;
@@ -149,26 +144,40 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     }
 
     /**
-     * BUSINESS LOGIC : itemType에 매핑된 카테고리 디폴트 프로필을 적용한다.
+     * 카테고리 디폴트 프로필을 적용합니다.
      *
-     * <h3>적용 규칙</h3>
+     * <h3>적용 알고리즘 (2계층 fallback)</h3>
+     * <ol>
+     *   <li>minor categoryName으로 프로필 검색 → 적용</li>
+     *   <li>못 찾으면 major categoryName으로 프로필 검색 → 적용</li>
+     *   <li>그래도 없으면 변경 없이 false 반환</li>
+     * </ol>
+     *
+     * <h3>override 옵션</h3>
      * <ul>
-     *   <li>매핑되는 프로필이 없으면 변경하지 않습니다 (silent skip).</li>
-     *   <li>{@code overrideExisting=false}일 때 기존 메타데이터에 값이 있는 필드는 보존됩니다
-     *       — 사용자/관리자가 수동 입력한 값을 부트스트랩이 덮어쓰지 않도록 보호합니다.</li>
-     *   <li>{@code overrideExisting=true}일 때 모든 필드를 프로필 값으로 강제 갱신합니다.</li>
+     *   <li>{@code overrideExisting=false} — 기존 메타데이터에 값이 있는 필드는 보존</li>
+     *   <li>{@code overrideExisting=true} — 모든 필드를 프로필 값으로 강제 갱신</li>
      * </ul>
      *
-     * @param itemType         minor category에서 결정되는 아이템 타입
-     * @param overrideExisting 기존 값 보존(false) 또는 강제 덮어쓰기(true)
+     * <h3>특수 케이스</h3>
+     * <p>
+     * 품목명 기반 단위 오버라이드는 이 메서드 외부 (애플리케이션 서비스)에서
+     * {@code REFGroceryItemSpecialCaseResolver}로 처리합니다 — AR이 도메인 서비스에
+     * 직접 의존하지 않도록 분리.
+     * </p>
+     *
+     * @param minorCategoryName minor category의 이름
+     * @param majorCategoryName major category의 이름
+     * @param overrideExisting  기존 값 보존(false) 또는 강제 덮어쓰기(true)
      * @return 적용 성공 시 true, 매핑 프로필 없거나 비활성 상태면 false
      */
-    public boolean applyDefaultProfile(REFInventoryItemType itemType, boolean overrideExisting) {
+    public boolean applyDefaultProfile(String minorCategoryName, String majorCategoryName,
+                                       boolean overrideExisting) {
         if (!isActive()) {
             return false;
         }
 
-        return REFGroceryItemUsageProfile.findByItemType(itemType)
+        return REFGroceryItemUsageProfile.findByCategoryNames(minorCategoryName, majorCategoryName)
                 .map(profile -> {
                     REFGroceryItemUsageMetadata profileMetadata = profile.toMetadata();
                     REFGroceryItemUsageMetadata current = getUsageMetadataOrEmpty();
@@ -181,10 +190,6 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                 .orElse(false);
     }
 
-    /**
-     * 기존 값이 있으면 보존, 없으면 프로필 값으로 채우는 머지 로직.
-     * {@code REFGroceryItemUsageMetadata.of()}로 다시 빌드하여 검증을 거칩니다.
-     */
     private static REFGroceryItemUsageMetadata mergePreservingExisting(
             REFGroceryItemUsageMetadata current,
             REFGroceryItemUsageMetadata profile) {
@@ -193,10 +198,9 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                 current.getDefaultUnit() != null ? current.getDefaultUnit() : profile.getDefaultUnit(),
                 current.getMinPortionAmount() != null ? current.getMinPortionAmount() : profile.getMinPortionAmount(),
                 current.getMaxPortionAmount() != null ? current.getMaxPortionAmount() : profile.getMaxPortionAmount(),
-                current.getSpoonVolumeMl() != null ? current.getSpoonVolumeMl() : profile.getSpoonVolumeMl(),
                 current.getPieceWeightGram() != null ? current.getPieceWeightGram() : profile.getPieceWeightGram(),
-                current.hasUsageTypes() ? current.getAllowedUsageTypes() : profile.getAllowedUsageTypes(),
-                current.getDefaultUsageType() != null ? current.getDefaultUsageType() : profile.getDefaultUsageType()
+                current.hasUsageUnits() ? current.getAllowedUsageUnits() : profile.getAllowedUsageUnits(),
+                current.getDefaultUsageUnit() != null ? current.getDefaultUsageUnit() : profile.getDefaultUsageUnit()
         );
     }
 
@@ -221,6 +225,10 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     }
 
     public String getCategoryNameValue() {
+        return this.groceryItemName.getValue();
+    }
+
+    public String getGroceryItemNameValue() {
         return this.groceryItemName.getValue();
     }
 
