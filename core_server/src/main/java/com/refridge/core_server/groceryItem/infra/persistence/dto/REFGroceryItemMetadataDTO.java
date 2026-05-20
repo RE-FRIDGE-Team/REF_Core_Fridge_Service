@@ -10,20 +10,16 @@ import lombok.Builder;
  * <ul>
  *   <li>{@code id} — Grocery item ID</li>
  *   <li>{@code name} — 식재료명</li>
- *   <li>{@code itemType} — Minor category의 item_type (RAW_MEAT, SAUCE_SEASONING 등)</li>
- *   <li>{@code defaultUnit} — 기본 사용량 단위 코드 (ML/G/EA, nullable)</li>
- *   <li>{@code minPortionAmount}, {@code maxPortionAmount} — 1회 분량 범위 (nullable)</li>
- *   <li>{@code spoonVolumeMl} — 1 TABLESPOON 부피 (nullable)</li>
- *   <li>{@code pieceWeightGram} — 1개당 중량 (nullable)</li>
- *   <li>{@code allowedUsageTypesCsv} — 노출 가능 UsageSpec CSV (nullable)</li>
- *   <li>{@code defaultUsageType} — 기본 활성 UsageSpec 코드 (nullable)</li>
+ *   <li>{@code itemType} — Minor category의 item_type (응답의 {@code category}로 노출)</li>
+ *   <li>{@code defaultUnit} — 최종 차감 단위 코드 (REFUsageUnit BASE 단위, nullable)</li>
+ *   <li>{@code minPortionAmount}, {@code maxPortionAmount} — 1회 합리적 사용 범위 (nullable)</li>
+ *   <li>{@code pieceWeightGram} — 1개당 g (nullable)</li>
+ *   <li>{@code allowedUsageUnitsCsv} — 입력 가능 단위 CSV (nullable)</li>
+ *   <li>{@code defaultUsageUnit} — 기본 활성 단위 코드 (nullable)</li>
  * </ul>
  *
- * <h3>itemType 결정 경로</h3>
- * <p>REFGroceryItem.minorCategoryId → REFMinorGroceryCategory.itemType (JOIN)</p>
- *
  * @author 이승훈
- * @since 2026. 5. 7. (확장: 2026. 5. 9.)
+ * @since 2026. 5. 12.
  */
 @Builder
 public record REFGroceryItemMetadataDTO(
@@ -33,9 +29,8 @@ public record REFGroceryItemMetadataDTO(
         String defaultUnit,
         Integer minPortionAmount,
         Integer maxPortionAmount,
-        Integer spoonVolumeMl,
         Integer pieceWeightGram,
-        String allowedUsageTypesCsv,
-        String defaultUsageType
+        String allowedUsageUnitsCsv,
+        String defaultUsageUnit
 ) {
 }

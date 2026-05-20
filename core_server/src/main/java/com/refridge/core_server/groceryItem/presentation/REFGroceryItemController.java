@@ -14,19 +14,20 @@ import org.springframework.web.bind.annotation.*;
  *
  * <h3>엔드포인트</h3>
  * <ul>
- *   <li>{@code GET /grocery-items/{id}/metadata} — 사용량 환산 메타데이터 조회</li>
+ *   <li>{@code GET /grocery-items/{id}/metadata} — 사용량 메타데이터 조회</li>
  *   <li>{@code PUT /grocery-items/{id}/metadata} — 메타데이터 일괄 갱신 (관리자용)</li>
- *   <li>{@code POST /grocery-items/{id}/metadata/apply-default} — 카테고리 디폴트 프로필 적용 (관리자용)</li>
+ *   <li>{@code POST /grocery-items/{id}/metadata/apply-default} — 카테고리 디폴트 + 특수 케이스 적용 (관리자용)</li>
  * </ul>
  *
- * <h3>fridge_server 측 매핑</h3>
+ * <h3>fridge_server 측 사용</h3>
  * <p>
- * {@code HttpGroceryItemAdapter}가 응답 본문을
- * {@code CoreServerGroceryItemResponse}로 역직렬화하여 사용합니다.
+ * {@code HttpGroceryItemAdapter}가 GET 응답을 {@code CoreServerGroceryItemResponse}로
+ * 역직렬화. 응답의 {@code allowedUsageUnits} / {@code defaultUsageUnit} 코드는
+ * fridge_server의 단위 enum과 매핑되어 UI 렌더링과 환산에 사용됩니다.
  * </p>
  *
  * @author 이승훈
- * @since 2026. 5. 7. (확장: 2026. 5. 9.)
+ * @since 2026. 5. 12.
  */
 @Slf4j
 @RestController
@@ -58,11 +59,7 @@ public class REFGroceryItemController {
     }
 
     /**
-     * 단건 GroceryItem에 카테고리 디폴트 프로필을 적용합니다.
-     * <p>
-     * 운영 중 새로 생성된 GroceryItem에 디폴트를 채우거나,
-     * 부트스트랩 후 새로 추가된 식재료에 사용합니다.
-     * </p>
+     * 단건 GroceryItem에 카테고리 디폴트 프로필 + 특수 케이스 오버라이드를 적용합니다.
      *
      * @param id       대상 GroceryItem ID
      * @param override true면 기존 값 강제 덮어쓰기, false(기본)면 기존 값 보존
