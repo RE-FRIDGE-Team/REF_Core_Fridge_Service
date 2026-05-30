@@ -123,7 +123,7 @@ public class REFReviewAdminService {
 
         // 카테고리 재분류 승인 → 비동기 카테고리 변경 이벤트 발행
         if (item.getReviewType() == REFReviewType.CATEGORY_REASSIGNMENT) {
-            eventPublisher.publishEvent(new REFCategoryReassignmentApprovedEvent(
+            eventPublisher.publishEvent(REFCategoryReassignmentApprovedEvent.of(
                     item.getId(),
                     item.getTargetValue(),
                     command.origProductName(),

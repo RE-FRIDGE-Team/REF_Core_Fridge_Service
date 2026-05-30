@@ -26,4 +26,7 @@ public interface REFMajorGroceryCategoryRepository extends JpaRepository<REFMajo
 
     @Query("SELECT m.id FROM REFMajorGroceryCategory m WHERE m.categoryName.value = :categoryName")
     Optional<Long> findCategoryIdByName(@Param("categoryName") String categoryName);
+
+    @Query("SELECT m.categoryName.value FROM REFMajorGroceryCategory m WHERE m.id = :categoryId")
+    Optional<String> findCategoryNameById(@Param("categoryId") Long categoryId);
 }

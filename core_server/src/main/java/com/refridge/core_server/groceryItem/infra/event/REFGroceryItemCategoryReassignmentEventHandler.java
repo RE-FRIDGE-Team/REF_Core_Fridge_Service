@@ -31,7 +31,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *   <li>targetValue 파싱: {@code "{correctedGroceryItemName}::{correctedCategoryPath}"}</li>
  *   <li>categoryPath 파싱: {@code "{majorCategoryName} > {minorCategoryName}"}</li>
  *   <li>카테고리 ID 조회 (majorCategoryName → ID, minorCategoryName → ID)</li>
- *   <li>GroceryItem 이름으로 조회 후 카테고리 변경</li>
+ *   <li>GroceryItem 이름으로 조회</li>
+ *   <li><b>★ 멱등성 가드 — 이미 동일 카테고리면 early-return (F4)</b></li>
+ *   <li>카테고리 변경 (실제 변경 발생)</li>
  *   <li>{@link REFGroceryItemCategoryChangedEvent} 발행 → Product BC로 전파 (커밋 후)</li>
  * </ol>
  *
@@ -49,8 +51,29 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * 데이터 정합성이 보장됩니다.
  * </p>
  *
+ * <h3>멱등성 — Step 7 Outbox 재전달 대비 (F4)</h3>
+ * <p>
+ * Outbox 인프라가 도입되면 같은 {@link REFCategoryReassignmentApprovedEvent}가
+ * at-least-once로 두 번 이상 들어올 수 있습니다.
+ * 이 경우 {@code categoricalService.changeCategory}가 조건부 UPDATE라면 DB 상태는 멱등하지만,
+ * 핸들러가 매번 다음 단계 이벤트({@link REFGroceryItemCategoryChangedEvent})를 발행하면
+ * Product BC가 중복 처리를 수행하게 됩니다.
+ * </p>
+ * <p>
+ * 따라서 핸들러 레벨에서 조회된 GroceryItem의 현재 카테고리와 목표 카테고리를 비교하여,
+ * 이미 동일하면 카테고리 변경 호출과 다음 이벤트 발행 모두를 스킵합니다.
+ * 이로써 Outbox 재전달 시나리오에서 Product BC가 받는 이벤트도 정확히 1회로 보장됩니다.
+ * </p>
+ *
+ * <h3>전제 조건</h3>
+ * <p>
+ * {@code REFGroceryItemRepository#findByGroceryItemName}이 반환하는 DTO는
+ * {@code groceryItemId()}, {@code majorCategoryId()}, {@code minorCategoryId()} 메서드를 노출해야 합니다.
+ * DTO가 카테고리 ID를 노출하지 않는다면 별도 조회를 추가해야 합니다.
+ * </p>
+ *
  * @author 이승훈
- * @since 2026. 4. 9.
+ * @since 2026. 4. 9. (Step 7 F4 멱등성 강화: 2026. 5. 30.)
  * @see REFCategoryReassignmentApprovedEvent
  * @see REFGroceryItemCategoryChangedEvent
  */
@@ -97,8 +120,8 @@ public class REFGroceryItemCategoryReassignmentEventHandler {
         String minorCategoryName = categoryParts[1].trim();
 
         // Step 3: 카테고리 ID 조회
-        Long newMajorCategoryId;
-        Long newMinorCategoryId;
+        final Long newMajorCategoryId;
+        final Long newMinorCategoryId;
         try {
             newMajorCategoryId = categoryValidateService.findMajorCategoryIdByName(majorCategoryName);
             newMinorCategoryId = categoryValidateService.findMinorCategoryIdByName(minorCategoryName);
@@ -115,6 +138,20 @@ public class REFGroceryItemCategoryReassignmentEventHandler {
                         groceryItemDto -> {
                             Long groceryItemId = groceryItemDto.groceryItemId();
 
+                            // ── F4 멱등성 가드 ─────────────────────────────────────
+                            // Outbox 재전달(at-least-once)로 같은 이벤트가 재유입되더라도,
+                            // 이미 목표 카테고리로 변경 완료된 상태라면:
+                            //   1) categoricalService.changeCategory 호출 스킵
+                            //   2) 다음 단계 REFGroceryItemCategoryChangedEvent 발행 스킵
+                            // 이로써 Product BC가 받는 cascade도 정확히 1회로 보장된다.
+                            if (newMajorCategoryId.equals(groceryItemDto.majorCategoryId())
+                                    && newMinorCategoryId.equals(groceryItemDto.minorCategoryId())) {
+                                log.debug("[GroceryItem 카테고리 재분류 핸들러] 이미 동일 카테고리 — 멱등 스킵. " +
+                                                "groceryItemId={}, reviewId={}",
+                                        groceryItemId, event.reviewId());
+                                return;
+                            }
+
                             categoricalService.changeCategory(
                                     REFGroceryItemCategoryChangeCommand.builder()
                                             .groceryItemId(groceryItemId)
@@ -129,9 +166,6 @@ public class REFGroceryItemCategoryReassignmentEventHandler {
 
                             // Step 5: Product BC로 이벤트 전파 — 커밋 후 발행
                             // @Async 수신측이 커밋 전 DB를 조회하는 타이밍 문제를 방지합니다.
-                            final Long finalMajorCategoryId = newMajorCategoryId;
-                            final Long finalMinorCategoryId = newMinorCategoryId;
-
                             TransactionSynchronizationManager.registerSynchronization(
                                     new TransactionSynchronization() {
                                         @Override
@@ -140,8 +174,8 @@ public class REFGroceryItemCategoryReassignmentEventHandler {
                                                     new REFGroceryItemCategoryChangedEvent(
                                                             groceryItemId,
                                                             correctedGroceryItemName,
-                                                            finalMajorCategoryId,
-                                                            finalMinorCategoryId,
+                                                            newMajorCategoryId,
+                                                            newMinorCategoryId,
                                                             event.origProductName(),
                                                             event.origBrandName(),
                                                             event.sourceFeedbackId()

@@ -103,6 +103,8 @@ public class REFGroceryItemRepositoryImpl implements REFGroceryItemRepositoryCus
                         REFGroceryItemWithCategoryPathDto.class,
                         rEFGroceryItem.id,
                         rEFGroceryItem.groceryItemName.value,
+                        rEFMajorGroceryCategory.id,
+                        rEFMinorGroceryCategory.id,
                         Expressions.stringTemplate(
                                 "CONCAT({0}, {1}, {2})",
                                 rEFMajorGroceryCategory.categoryName.value,
