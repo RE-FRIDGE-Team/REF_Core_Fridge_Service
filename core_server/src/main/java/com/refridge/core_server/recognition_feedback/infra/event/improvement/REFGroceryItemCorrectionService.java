@@ -117,7 +117,7 @@ public class REFGroceryItemCorrectionService {
 
         redisTemplate.opsForHash().put(CORRECTION_CONFIRMED_KEY, originalName, correctedName);
 
-        eventPublisher.publishEvent(new REFGroceryItemCorrectionConfirmedEvent(
+        eventPublisher.publishEvent(REFGroceryItemCorrectionConfirmedEvent.of(
                 originalName, correctedName, occurrenceCount, totalCount,
                 originalProductName));
 

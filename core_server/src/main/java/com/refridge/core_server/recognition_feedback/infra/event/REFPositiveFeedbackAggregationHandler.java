@@ -202,7 +202,7 @@ public class REFPositiveFeedbackAggregationHandler {
 
         if (!registrationPolicy.isMet(aggregation)) return;
 
-        eventPublisher.publishEvent(new REFProductFeedbackAggregationEvent(
+        eventPublisher.publishEvent(REFProductFeedbackAggregationEvent.of(
                 snapshot.getProductName(),
                 snapshot.getBrandName(),
                 snapshot.getGroceryItemId(),

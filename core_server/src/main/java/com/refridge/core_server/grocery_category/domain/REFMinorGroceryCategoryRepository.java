@@ -20,4 +20,7 @@ public interface REFMinorGroceryCategoryRepository extends JpaRepository<REFMino
 
     @Query("SELECT m.id FROM REFMinorGroceryCategory m WHERE m.categoryName.value = :categoryName")
     Optional<Long> findCategoryIdByName(@Param("categoryName") String categoryName);
+
+    @Query("SELECT m.categoryName.value FROM REFMinorGroceryCategory m WHERE m.id = :categoryId")
+    Optional<String> findCategoryNameById(@Param("categoryId") Long categoryId);
 }

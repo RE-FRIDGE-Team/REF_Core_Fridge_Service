@@ -82,6 +82,20 @@ import org.springframework.stereotype.Component;
  * 등록 실패 시에는 플래그를 세팅하지 않아 다음 긍정 피드백에서 자동으로 재시도됩니다.
  * </p>
  *
+ * <h3>멱등성 — Step 7 Outbox 재전달 대비 (F4)</h3>
+ * <p>
+ * Outbox 인프라가 도입되면 같은 이벤트가 at-least-once로 두 번 이상 들어올 수 있습니다.
+ * 이 핸들러는 두 단계의 멱등성 보장을 갖춥니다:
+ * </p>
+ * <ol>
+ *   <li><b>handle() 진입 직후 REGISTERED 플래그 사전 체크</b> — 이미 등록 완료된 productName에 대해
+ *       GroceryItem 조회/alias 조회/upsert 전체를 스킵하여 DB·Redis 부하 절감</li>
+ *   <li><b>upsertProduct 내부 중복 체크</b> — (productName, groceryItemId) 조합으로 중복이면 noop</li>
+ * </ol>
+ * <p>
+ * 두 단계 모두 멱등하므로, Outbox 재전달이나 동시 처리에서도 안전합니다.
+ * </p>
+ *
  * <h3>비동기 실행</h3>
  * <p>
  * {@code @Async}로 실행되어 긍정 피드백 처리 스레드를 블로킹하지 않습니다.
@@ -90,7 +104,7 @@ import org.springframework.stereotype.Component;
  * </p>
  *
  * @author 이승훈
- * @since 2026. 4. 3.
+ * @since 2026. 4. 3. (Step 7 F4 멱등성 강화: 2026. 5. 30.)
  * @see com.refridge.core_server.recognition_feedback.infra.event.REFPositiveFeedbackAggregationHandler
  * @see com.refridge.core_server.recognition_feedback.domain.service.REFProductRegistrationPolicy
  * @see REFAliasConfirmationService
@@ -114,6 +128,7 @@ public class REFProductFeedbackAggregationEventHandler {
      * <h3>처리 순서</h3>
      * <ol>
      *   <li>{@code groceryItemId} 유효성 검증 — 누락 시 경고 로그 후 종료</li>
+     *   <li><b>★ REGISTERED 플래그 사전 체크 — Outbox 재전달 멱등성 가드 (F4)</b></li>
      *   <li>{@code REFGroceryItem} 조회 — 카테고리 ID 확보 목적. 없으면 종료</li>
      *   <li>alias 조회 ({@code alias:confirmed HGET}) — alias 있으면 alias명, 없으면 원본명으로 등록명 결정</li>
      *   <li>{@code upsertProduct()} 호출 — 중복이면 무시, 신규면 INSERT</li>
@@ -148,6 +163,17 @@ public class REFProductFeedbackAggregationEventHandler {
         // Product 등록에 필수 값이므로 등록 불가
         if (groceryItemId == null) {
             log.warn("[Product 자동등록] groceryItemId 누락. productName='{}'", originalProductName);
+            return;
+        }
+
+        // ── F4 멱등성 가드: REGISTERED 플래그 사전 체크 ───────────────────────
+        // Outbox 재전달(at-least-once)로 동일 이벤트가 재유입되는 경우, 이전 처리에서 세팅된
+        // 플래그를 확인하여 GroceryItem 조회·alias 조회·upsertProduct 전체를 스킵합니다.
+        // 플래그가 없는 경우만 정상 흐름을 타므로 등록 실패 후 자동 재시도 동작도 보존됩니다.
+        final String flagKey = REGISTERED_FLAG_PREFIX + originalProductName;
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(flagKey))) {
+            log.debug("[Product 자동등록] 이미 등록 완료된 productName='{}' — 중복 이벤트 스킵 (멱등 가드).",
+                    originalProductName);
             return;
         }
 
@@ -190,7 +216,6 @@ public class REFProductFeedbackAggregationEventHandler {
             // 원본명 기준으로 세팅 — 피드백 카운터 키(feedback:positive:{originalName})와 일치시켜
             // REFPositiveFeedbackAggregationHandler의 isAlreadyRegistered() 체크가 정확히 동작하게 함.
             // finalProductName(alias명) 기준으로 세팅하면 카운터 키와 불일치하여 플래그가 동작하지 않음.
-            String flagKey = REGISTERED_FLAG_PREFIX + originalProductName;
             redisTemplate.opsForValue().set(flagKey, "1");
 
             log.info("[Product 자동등록] 완료. originalName='{}', registeredName='{}', groceryItemId={}",

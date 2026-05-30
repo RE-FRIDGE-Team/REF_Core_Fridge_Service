@@ -2,6 +2,7 @@ package com.refridge.core_server.groceryItem.domain.ar;
 
 import com.refridge.core_server.common.REFEntityTimeMetaData;
 import com.refridge.core_server.groceryItem.domain.REFGroceryItemRepository;
+import com.refridge.core_server.groceryItem.domain.event.REFGroceryItemCreatedEvent;
 import com.refridge.core_server.groceryItem.domain.service.REFGroceryItemCategoryValidateAndAdaptService;
 import com.refridge.core_server.groceryItem.domain.vo.*;
 import com.refridge.core_server.groceryItem.infra.persistence.REFGroceryItemClassificationConverter;
@@ -54,12 +55,12 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
     @Embedded
     private REFGroceryCategoryReference groceryCategoryReference;
 
+    @Embedded
     /**
      * 사용량 환산 메타데이터.
      * fridge_server의 요리(Cook) 기능에서 단위 환산 시 참조합니다.
      * 모든 필드가 nullable이며, 미설정 시 {@link REFGroceryItemUsageMetadata#empty()}로 초기화됩니다.
      */
-    @Embedded
     private REFGroceryItemUsageMetadata usageMetadata;
 
     @Embedded
@@ -84,6 +85,31 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
         }
     }
 
+    /**
+     * JPA 영속화 직후 콜백 — ID가 할당된 시점에 도메인 이벤트를 등록합니다.
+     * <p>
+     * {@link #create(String, String, String, Long, Long, REFGroceryItemCategoryValidateAndAdaptService)}
+     * 팩토리로 생성된 인스턴스에 한해 {@link REFGroceryItemCreatedEvent}가 등록됩니다.
+     * 쿼리로 hydrate된 인스턴스는 {@code markCreatedForAutoFill}이 false라 무시됩니다.
+     * </p>
+     * <p>
+     * 등록된 이벤트는 Spring Data JPA {@code AbstractAggregateRoot.andEvents()}에 의해
+     * {@code save()} 완료 시점에 ApplicationEventPublisher로 전파됩니다.
+     * </p>
+     */
+    @PostPersist
+    protected void onPostPersist() {
+        if (markCreatedForAutoFill && this.id != null) {
+            registerEvent(new REFGroceryItemCreatedEvent(
+                    this.id,
+                    this.groceryItemName != null ? this.groceryItemName.getValue() : null,
+                    getMajorCategoryId(),
+                    getMinorCategoryId()
+            ));
+            markCreatedForAutoFill = false;  // idempotent — 두 번 발행되지 않도록
+        }
+    }
+
     /* CREATION FACTORY METHOD */
     public static REFGroceryItem create(String groceryItemName,
                                         String representativeImageUrl,
@@ -101,8 +127,22 @@ public class REFGroceryItem extends AbstractAggregateRoot<REFGroceryItem> {
                         .groceryCategoryReference(REFGroceryCategoryReference.of(majorCategoryId, minorCategoryId))
                         .usageMetadata(REFGroceryItemUsageMetadata.empty())
                         .build())
+                .map(grocery -> {
+                    grocery.markCreatedForAutoFill = true;
+                    return grocery;
+                })
                 .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 카테고리 정보입니다."));
     }
+
+    /**
+     * INTERNAL — "이 인스턴스는 신규 생성된 것이며 메타데이터 자동 채움 대상"임을 표시합니다.
+     * <p>
+     * @PostPersist 시점에 ID가 할당된 후 이벤트를 등록하기 위한 플래그입니다.
+     * JPA에 의해 영속화된 기존 인스턴스(쿼리로 조회된 것)와 구별하기 위함입니다.
+     * </p>
+     */
+    @jakarta.persistence.Transient
+    private transient boolean markCreatedForAutoFill = false;
 
     public static REFGroceryItem createAndSave(String groceryItemName,
                                                String representativeImageUrl,
